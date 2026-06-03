@@ -84,15 +84,22 @@ pnpm dev                      # http://localhost:3000
 
 ### Logging in
 
-Login uses **KMITL SSO**. Set `KMITL_SSO_CLIENT_ID` / `KMITL_SSO_CLIENT_SECRET` /
-`KMITL_SSO_ISSUER` in `.env` (register an SSO client at
-[developer.kmitl.ac.th](https://developer.kmitl.ac.th) and add the redirect URI
-`http://localhost:3000/api/auth/oauth2/callback/kmitl`). Until those are set, public
-pages work but sign-in is disabled. First login auto-creates the account; to grant
-admin, flip the flag on your user row:
+Login uses **KMITL SSO** (issuer `https://sso.kmitl.ac.th/realms/master`). Set
+`KMITL_SSO_CLIENT_ID` / `KMITL_SSO_CLIENT_SECRET` / `KMITL_SSO_ISSUER` in `.env`
+(register an SSO client at [developer.kmitl.ac.th](https://developer.kmitl.ac.th) and
+add the redirect URI `http://localhost:3000/api/auth/oauth2/callback/kmitl`). Until
+those are set, public pages work but sign-in is disabled. First login auto-provisions
+the account; sign-out performs **Single Logout** (ends the KMITL session too).
+
+> **Student id claim:** KMITL's default scopes (`openid profile email`) don't include
+> the 8-digit student id — it's a special claim you request from KDMC. Once granted,
+> set `KMITL_SSO_STUDENT_ID_CLAIM` to that claim name; otherwise the user handle falls
+> back to `preferred_username` / `sub`.
+
+To grant admin, flip the flag on your user row:
 
 ```sql
-UPDATE "user" SET is_admin = true WHERE username = '<your-student-id>';
+UPDATE "user" SET is_admin = true WHERE username = '<your-handle>';
 ```
 
 ## 📜 Scripts

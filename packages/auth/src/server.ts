@@ -29,11 +29,35 @@ const discoveryUrl = process.env.KMITL_SSO_ISSUER
 	: undefined
 
 type OidcProfile = {
+	sub?: string
 	email?: string
 	preferred_username?: string
 	given_name?: string
 	family_name?: string
 	name?: string
+	// KMITL's default scopes (openid profile email) do NOT include the 8-digit
+	// student id — it's a special claim you must request from KDMC. Set
+	// KMITL_SSO_STUDENT_ID_CLAIM to that claim name once granted.
+	[claim: string]: unknown
+}
+
+/**
+ * Derive a stable user handle (preferably the 8-digit student id) from OIDC claims.
+ * Order: explicit student-id claim → numeric preferred_username → numeric email
+ * local-part → preferred_username → sub.
+ */
+function deriveUsername(profile: OidcProfile): string | undefined {
+	const claimName = process.env.KMITL_SSO_STUDENT_ID_CLAIM
+	const fromClaim = claimName ? profile[claimName] : undefined
+	if (typeof fromClaim === 'string' && fromClaim) return fromClaim
+
+	const preferred = profile.preferred_username ?? ''
+	if (STUDENT_ID_RE.test(preferred)) return preferred
+
+	const local = (profile.email ?? '').toLowerCase().split('@')[0] ?? ''
+	if (STUDENT_ID_RE.test(local)) return local
+
+	return preferred || profile.sub || undefined
 }
 
 export const auth = betterAuth({
@@ -93,21 +117,17 @@ export const auth = betterAuth({
 							scopes: ['openid', 'profile', 'email'],
 							pkce: true,
 							mapProfileToUser: (profile: OidcProfile) => {
-								const email = (profile.email ?? '').toLowerCase()
-								const local = email.split('@')[0] ?? ''
-								const studentId = STUDENT_ID_RE.test(local)
-									? local
-									: (profile.preferred_username ?? undefined)
+								const username = deriveUsername(profile)
 								// Extra keys are valid additionalFields; the cast satisfies the
 								// generic mapProfileToUser return type (it can't infer them).
 								return {
 									name:
 										profile.name ??
 										`${profile.given_name ?? ''} ${profile.family_name ?? ''}`.trim(),
-									username: studentId,
+									username,
 									firstName: profile.given_name,
 									lastName: profile.family_name,
-									nickname: profile.given_name ?? studentId,
+									nickname: profile.given_name ?? username,
 								} as { name?: string; email?: string }
 							},
 						},
@@ -119,3 +139,27 @@ export const auth = betterAuth({
 
 export type Auth = typeof auth
 export type Session = Auth['$Infer']['Session']
+
+export const BETTER_AUTH_URL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
+
+/**
+ * KMITL's `end_session_endpoint` from the OIDC discovery doc, for Single Logout.
+ * genericOAuth (consumer) has no built-in provider logout, so we resolve it once
+ * and cache it. Returns null when SSO isn't configured or the fetch fails.
+ */
+let endSessionCache: string | null | undefined
+export async function getSsoEndSessionEndpoint(): Promise<string | null> {
+	if (endSessionCache !== undefined) return endSessionCache
+	if (!discoveryUrl) {
+		endSessionCache = null
+		return null
+	}
+	try {
+		const res = await fetch(discoveryUrl)
+		const doc = (await res.json()) as { end_session_endpoint?: string }
+		endSessionCache = doc.end_session_endpoint ?? null
+	} catch {
+		endSessionCache = null
+	}
+	return endSessionCache
+}
