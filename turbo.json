@@ -1,0 +1,59 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"ui": "tui",
+	"globalDependencies": ["**/.env", "tsconfig.base.json"],
+	"globalEnv": [
+		"NODE_ENV",
+		"DATABASE_URL",
+		"BETTER_AUTH_SECRET",
+		"BETTER_AUTH_URL",
+		"GOOGLE_CLIENT_ID",
+		"GOOGLE_CLIENT_SECRET",
+		"SMTP_HOST",
+		"SMTP_PORT",
+		"SMTP_USER",
+		"SMTP_PASSWORD",
+		"SMTP_FROM",
+		"BLOB_READ_WRITE_TOKEN"
+	],
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"outputs": [".output/**", "dist/**", ".vinxi/**", ".nitro/**"]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true
+		},
+		"typecheck": {
+			"dependsOn": ["^build"],
+			"outputs": []
+		},
+		"test": {
+			"dependsOn": ["^build"],
+			"outputs": ["coverage/**"]
+		},
+		"lint": {
+			"outputs": []
+		},
+		"clean": {
+			"cache": false
+		},
+		"generate": {
+			"cache": false
+		},
+		"migrate": {
+			"cache": false
+		},
+		"push": {
+			"cache": false
+		},
+		"seed": {
+			"cache": false
+		},
+		"studio": {
+			"cache": false,
+			"persistent": true
+		}
+	}
+}

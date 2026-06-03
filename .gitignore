@@ -1,0 +1,36 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build outputs
+dist/
+.output/
+.nitro/
+.vinxi/
+.turbo/
+build/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# test
+coverage/
+playwright-report/
+test-results/
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# drizzle
+packages/db/drizzle/meta/_journal.json.bak
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@import "@repo/tailwind-config/theme.css";
+
+/* Scan workspace UI package for class names. */
+@source "../../../../packages/ui/src";
+
+@layer base {
+	html {
+		font-family: var(--font-sans);
+	}
+	body {
+		@apply bg-slate-50 text-slate-900 antialiased;
+	}
+}

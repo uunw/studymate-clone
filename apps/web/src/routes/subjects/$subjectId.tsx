@@ -1,0 +1,297 @@
+import { reviewSchema } from '@repo/core/schemas'
+import { formatTerm, formatThaiDate } from '@repo/core/utils'
+import {
+	Alert,
+	Badge,
+	Button,
+	Card,
+	CardBody,
+	CardHeader,
+	EmptyState,
+	Field,
+	Input,
+	Label,
+	RatingInput,
+	RatingStars,
+	Textarea,
+} from '@repo/ui'
+import { useForm } from '@tanstack/react-form'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
+import { subjectQuery, subjectReviewsQuery } from '~/queries'
+import { deleteReview, toggleLike, upsertReview } from '~/server/reviews'
+
+export const Route = createFileRoute('/subjects/$subjectId')({
+	loader: async ({ context, params }) => {
+		await Promise.all([
+			context.queryClient.ensureQueryData(subjectQuery(params.subjectId)),
+			context.queryClient.ensureQueryData(subjectReviewsQuery(params.subjectId)),
+		])
+	},
+	component: SubjectDetail,
+})
+
+function SubjectDetail() {
+	const { subjectId } = Route.useParams()
+	const { user } = Route.useRouteContext()
+	const { data: subject } = useSuspenseQuery(subjectQuery(subjectId))
+	const { data: reviews } = useSuspenseQuery(subjectReviewsQuery(subjectId))
+
+	return (
+		<div className="space-y-8">
+			<Card>
+				<CardBody className="space-y-3">
+					<div className="flex items-start justify-between gap-3">
+						<div>
+							<h1 className="font-bold text-2xl text-slate-900">{subject.nameTh}</h1>
+							<p className="mt-1 text-slate-500">{subject.nameEn}</p>
+							<p className="mt-1 text-slate-500 text-sm">{subject.id}</p>
+						</div>
+						<Badge tone="brand">{subject.credit} หน่วยกิต</Badge>
+					</div>
+					<div className="flex items-center gap-2">
+						<RatingStars value={subject.rating} />
+						<span className="text-slate-500 text-sm">
+							{subject.rating.toFixed(1)} ({subject.reviewCount} รีวิว)
+						</span>
+					</div>
+					{subject.detail && <p className="text-slate-600 text-sm">{subject.detail}</p>}
+				</CardBody>
+			</Card>
+
+			{user ? (
+				<ReviewForm subjectId={subjectId} />
+			) : (
+				<Alert tone="info">เข้าสู่ระบบเพื่อเขียนรีวิวรายวิชานี้</Alert>
+			)}
+
+			<section className="space-y-4">
+				<h2 className="font-semibold text-slate-900 text-lg">รีวิวทั้งหมด ({reviews.length})</h2>
+				{reviews.length === 0 ? (
+					<EmptyState title="ยังไม่มีรีวิว" description="เป็นคนแรกที่รีวิวรายวิชานี้" />
+				) : (
+					<div className="space-y-4">
+						{reviews.map((review) => (
+							<ReviewCard
+								key={review.id}
+								review={review}
+								subjectId={subjectId}
+								canDelete={!!user && review.authorId === user.id}
+							/>
+						))}
+					</div>
+				)}
+			</section>
+		</div>
+	)
+}
+
+function ReviewForm({ subjectId }: { subjectId: string }) {
+	const qc = useQueryClient()
+	const [error, setError] = useState<string | null>(null)
+	const currentBuddhistYear = new Date().getFullYear() + 543
+
+	const form = useForm({
+		defaultValues: {
+			subjectId,
+			year: currentBuddhistYear,
+			term: 1,
+			rating: 0,
+			review: '',
+		},
+		validators: { onSubmit: reviewSchema },
+		onSubmit: async ({ value }) => {
+			setError(null)
+			try {
+				await upsertReview({ data: value })
+				await Promise.all([
+					qc.invalidateQueries({ queryKey: ['subject-reviews', subjectId] }),
+					qc.invalidateQueries({ queryKey: ['subject', subjectId] }),
+				])
+				form.reset()
+			} catch {
+				setError('บันทึกรีวิวไม่สำเร็จ กรุณาลองใหม่')
+			}
+		},
+	})
+
+	return (
+		<Card>
+			<CardHeader>
+				<h2 className="font-semibold text-slate-900">เขียนรีวิว</h2>
+			</CardHeader>
+			<CardBody>
+				{error && (
+					<Alert tone="error" className="mb-4">
+						{error}
+					</Alert>
+				)}
+				<form
+					className="space-y-4"
+					onSubmit={(e) => {
+						e.preventDefault()
+						form.handleSubmit()
+					}}
+				>
+					<form.Field name="subjectId">
+						{(field) => <input type="hidden" value={field.state.value} readOnly />}
+					</form.Field>
+
+					<div className="grid grid-cols-2 gap-3">
+						<form.Field name="year">
+							{(field) => (
+								<Field
+									label="ปีการศึกษา (พ.ศ.)"
+									htmlFor={field.name}
+									error={field.state.meta.errors[0]?.message}
+								>
+									<Input
+										id={field.name}
+										type="number"
+										inputMode="numeric"
+										value={field.state.value}
+										onBlur={field.handleBlur}
+										onChange={(e) => field.handleChange(Number(e.target.value))}
+									/>
+								</Field>
+							)}
+						</form.Field>
+						<form.Field name="term">
+							{(field) => (
+								<Field
+									label="ภาคเรียน"
+									htmlFor={field.name}
+									error={field.state.meta.errors[0]?.message}
+								>
+									<select
+										id={field.name}
+										className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+										value={field.state.value}
+										onBlur={field.handleBlur}
+										onChange={(e) => field.handleChange(Number(e.target.value))}
+									>
+										<option value={1}>1</option>
+										<option value={2}>2</option>
+										<option value={3}>3</option>
+									</select>
+								</Field>
+							)}
+						</form.Field>
+					</div>
+
+					<form.Field name="rating">
+						{(field) => (
+							<div className="space-y-1">
+								<Label>คะแนน</Label>
+								<RatingInput value={field.state.value} onChange={(v) => field.handleChange(v)} />
+								{field.state.meta.errors[0]?.message && (
+									<p className="text-red-600 text-xs">{field.state.meta.errors[0].message}</p>
+								)}
+							</div>
+						)}
+					</form.Field>
+
+					<form.Field name="review">
+						{(field) => (
+							<Field label="รีวิว" htmlFor={field.name} error={field.state.meta.errors[0]?.message}>
+								<Textarea
+									id={field.name}
+									placeholder="แบ่งปันประสบการณ์เรียนวิชานี้..."
+									value={field.state.value}
+									onBlur={field.handleBlur}
+									onChange={(e) => field.handleChange(e.target.value)}
+								/>
+							</Field>
+						)}
+					</form.Field>
+
+					<form.Subscribe selector={(s) => s.isSubmitting}>
+						{(isSubmitting) => (
+							<Button type="submit" loading={isSubmitting}>
+								บันทึกรีวิว
+							</Button>
+						)}
+					</form.Subscribe>
+				</form>
+			</CardBody>
+		</Card>
+	)
+}
+
+type ReviewItem = Awaited<
+	ReturnType<NonNullable<ReturnType<typeof subjectReviewsQuery>['queryFn']>>
+>[number]
+
+function ReviewCard({
+	review,
+	subjectId,
+	canDelete,
+}: {
+	review: ReviewItem
+	subjectId: string
+	canDelete: boolean
+}) {
+	const qc = useQueryClient()
+	const [liked, setLiked] = useState(false)
+	const [likeCount, setLikeCount] = useState(review.likeCount)
+	const [pending, setPending] = useState(false)
+
+	const onToggleLike = async () => {
+		setPending(true)
+		try {
+			const res = await toggleLike({ data: { reviewId: review.id } })
+			setLiked(res.liked)
+			setLikeCount(res.likeCount)
+		} catch {
+			// ignore — likely not signed in
+		} finally {
+			setPending(false)
+		}
+	}
+
+	const onDelete = async () => {
+		setPending(true)
+		try {
+			await deleteReview({ data: review.id })
+			await Promise.all([
+				qc.invalidateQueries({ queryKey: ['subject-reviews', subjectId] }),
+				qc.invalidateQueries({ queryKey: ['subject', subjectId] }),
+			])
+		} finally {
+			setPending(false)
+		}
+	}
+
+	return (
+		<Card>
+			<CardBody className="space-y-2">
+				<div className="flex items-start justify-between gap-3">
+					<div>
+						<p className="font-medium text-slate-900">
+							{review.authorNickname ?? review.authorName ?? 'ผู้ใช้'}
+						</p>
+						<p className="text-slate-500 text-xs">
+							{review.year != null && review.term != null
+								? `${formatTerm(review.year, review.term)} · `
+								: ''}
+							{review.createdAt ? formatThaiDate(new Date(review.createdAt)) : ''}
+						</p>
+					</div>
+					<RatingStars value={review.rating} />
+				</div>
+				<p className="whitespace-pre-wrap text-slate-700 text-sm">{review.review}</p>
+				<div className="flex items-center gap-3 pt-1">
+					<Button variant="ghost" size="sm" loading={pending} onClick={onToggleLike}>
+						{liked ? 'เลิกถูกใจ' : 'ถูกใจ'} ({likeCount})
+					</Button>
+					{canDelete && (
+						<Button variant="danger" size="sm" loading={pending} onClick={onDelete}>
+							ลบ
+						</Button>
+					)}
+				</div>
+			</CardBody>
+		</Card>
+	)
+}

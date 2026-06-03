@@ -1,0 +1,29 @@
+{
+	"name": "@repo/auth",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./client": "./src/client.ts",
+		"./server": "./src/server.ts"
+	},
+	"scripts": {
+		"seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run --passWithNoTests",
+		"clean": "rm -rf dist .turbo"
+	},
+	"dependencies": {
+		"@repo/db": "workspace:*",
+		"better-auth": "catalog:",
+		"nodemailer": "^6.9.16"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/nodemailer": "^6.4.17",
+		"tsx": "^4.19.0",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

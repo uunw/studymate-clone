@@ -1,0 +1,33 @@
+{
+	"name": "@repo/db",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./schema": "./src/schema/index.ts",
+		"./client": "./src/client.ts"
+	},
+	"scripts": {
+		"generate": "drizzle-kit generate",
+		"migrate": "drizzle-kit migrate",
+		"push": "drizzle-kit push",
+		"studio": "drizzle-kit studio",
+		"seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run --passWithNoTests",
+		"clean": "rm -rf dist .turbo"
+	},
+	"dependencies": {
+		"drizzle-orm": "catalog:",
+		"pg": "^8.13.0"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@types/pg": "^8.11.10",
+		"drizzle-kit": "catalog:",
+		"tsx": "^4.19.0",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}
