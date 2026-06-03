@@ -1,10 +1,9 @@
-import { changePasswordSchema, profileSchema } from '@repo/core/schemas'
+import { profileSchema } from '@repo/core/schemas'
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { authClient } from '~/lib/auth-client'
 import { curriculaQuery } from '~/queries'
 import { selectCurriculum, updateProfile } from '~/server/profile'
 
@@ -25,10 +24,6 @@ function Profile() {
 
 	const [profileSaved, setProfileSaved] = useState(false)
 	const [curriculumError, setCurriculumError] = useState<string | null>(null)
-	const [passwordResult, setPasswordResult] = useState<{
-		tone: 'success' | 'error'
-		message: string
-	} | null>(null)
 
 	const profileForm = useForm({
 		defaultValues: {
@@ -42,29 +37,6 @@ function Profile() {
 			await updateProfile({ data: value })
 			await router.invalidate()
 			setProfileSaved(true)
-		},
-	})
-
-	const passwordForm = useForm({
-		defaultValues: {
-			currentPassword: '',
-			newPassword: '',
-			newPasswordConfirm: '',
-		},
-		validators: { onSubmit: changePasswordSchema },
-		onSubmit: async ({ value }) => {
-			setPasswordResult(null)
-			const res = await authClient.changePassword({
-				currentPassword: value.currentPassword,
-				newPassword: value.newPassword,
-				revokeOtherSessions: true,
-			})
-			if (res.error) {
-				setPasswordResult({ tone: 'error', message: 'เปลี่ยนรหัสผ่านไม่สำเร็จ กรุณาตรวจสอบรหัสผ่านปัจจุบัน' })
-				return
-			}
-			setPasswordResult({ tone: 'success', message: 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว' })
-			passwordForm.reset()
 		},
 	})
 
@@ -180,94 +152,6 @@ function Profile() {
 							))}
 						</select>
 					</Field>
-				</CardBody>
-			</Card>
-
-			<Card>
-				<CardHeader>
-					<h2 className="font-semibold text-slate-900">เปลี่ยนรหัสผ่าน</h2>
-				</CardHeader>
-				<CardBody className="space-y-4">
-					{passwordResult && <Alert tone={passwordResult.tone}>{passwordResult.message}</Alert>}
-					<form
-						className="space-y-4"
-						onSubmit={(e) => {
-							e.preventDefault()
-							passwordForm.handleSubmit()
-						}}
-					>
-						<passwordForm.Field name="currentPassword">
-							{(field) => (
-								<Field
-									label="รหัสผ่านปัจจุบัน"
-									htmlFor={field.name}
-									error={field.state.meta.errors[0]?.message}
-								>
-									<Input
-										id={field.name}
-										type="password"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</passwordForm.Field>
-						<passwordForm.Field name="newPassword">
-							{(field) => (
-								<Field
-									label="รหัสผ่านใหม่"
-									htmlFor={field.name}
-									error={field.state.meta.errors[0]?.message}
-								>
-									<Input
-										id={field.name}
-										type="password"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</passwordForm.Field>
-						<passwordForm.Field
-							name="newPasswordConfirm"
-							validators={{
-								onChangeListenTo: ['newPassword'],
-								onChange: ({ value, fieldApi }) =>
-									value === fieldApi.form.getFieldValue('newPassword')
-										? undefined
-										: 'ยืนยันรหัสผ่านไม่ตรงกัน',
-							}}
-						>
-							{(field) => (
-								<Field
-									label="ยืนยันรหัสผ่านใหม่"
-									htmlFor={field.name}
-									error={
-										typeof field.state.meta.errors[0] === 'string'
-											? field.state.meta.errors[0]
-											: field.state.meta.errors[0]?.message
-									}
-								>
-									<Input
-										id={field.name}
-										type="password"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</passwordForm.Field>
-						<passwordForm.Subscribe selector={(s) => s.isSubmitting}>
-							{(isSubmitting) => (
-								<Button type="submit" loading={isSubmitting}>
-									เปลี่ยนรหัสผ่าน
-								</Button>
-							)}
-						</passwordForm.Subscribe>
-					</form>
 				</CardBody>
 			</Card>
 		</div>

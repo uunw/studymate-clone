@@ -22,9 +22,9 @@ function Home() {
 						<Button size="lg">เริ่มค้นหารายวิชา</Button>
 					</Link>
 					{!user && (
-						<Link to="/sign-up">
+						<Link to="/sign-in">
 							<Button size="lg" variant="secondary">
-								สมัครสมาชิก
+								เข้าสู่ระบบ KMITL
 							</Button>
 						</Link>
 					)}

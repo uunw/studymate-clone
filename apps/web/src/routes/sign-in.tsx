@@ -1,7 +1,5 @@
-import { signInSchema } from '@repo/core/schemas'
-import { Alert, Button, Card, CardBody, Field, Input } from '@repo/ui'
-import { useForm } from '@tanstack/react-form'
-import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
+import { Alert, Button, Card, CardBody } from '@repo/ui'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { authClient } from '~/lib/auth-client'
 
@@ -13,89 +11,37 @@ export const Route = createFileRoute('/sign-in')({
 })
 
 function SignIn() {
-	const router = useRouter()
 	const [error, setError] = useState<string | null>(null)
+	const [loading, setLoading] = useState(false)
 
-	const form = useForm({
-		defaultValues: { studentId: '', password: '' },
-		validators: { onSubmit: signInSchema },
-		onSubmit: async ({ value }) => {
-			setError(null)
-			const res = await authClient.signIn.username({
-				username: value.studentId,
-				password: value.password,
-			})
-			if (res.error) {
-				setError('รหัสนักศึกษาหรือรหัสผ่านไม่ถูกต้อง')
-				return
-			}
-			await router.invalidate()
-			router.navigate({ to: '/' })
-		},
-	})
+	async function handleSso() {
+		setError(null)
+		setLoading(true)
+		const res = await authClient.signIn.oauth2({
+			providerId: 'kmitl',
+			callbackURL: '/',
+			errorCallbackURL: '/sign-in',
+		})
+		// On success the browser is redirected to KMITL; reaching here = a problem.
+		if (res?.error) {
+			setError('ไม่สามารถเริ่มการเข้าสู่ระบบ KMITL SSO ได้ (ยังไม่ได้ตั้งค่า?)')
+			setLoading(false)
+		}
+	}
 
 	return (
-		<div className="mx-auto max-w-sm py-8">
+		<div className="mx-auto max-w-sm py-12">
 			<Card>
-				<CardBody className="space-y-4">
-					<h1 className="font-bold text-xl">เข้าสู่ระบบ</h1>
+				<CardBody className="space-y-5 text-center">
+					<div>
+						<h1 className="font-bold text-xl">เข้าสู่ระบบ</h1>
+						<p className="mt-1 text-slate-500 text-sm">ใช้บัญชี KMITL ของคุณเพื่อเข้าสู่ระบบ</p>
+					</div>
 					{error && <Alert tone="error">{error}</Alert>}
-					<form
-						className="space-y-4"
-						onSubmit={(e) => {
-							e.preventDefault()
-							form.handleSubmit()
-						}}
-					>
-						<form.Field name="studentId">
-							{(field) => (
-								<Field
-									label="รหัสนักศึกษา"
-									htmlFor={field.name}
-									error={field.state.meta.errors[0]?.message}
-								>
-									<Input
-										id={field.name}
-										inputMode="numeric"
-										placeholder="64010001"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</form.Field>
-						<form.Field name="password">
-							{(field) => (
-								<Field
-									label="รหัสผ่าน"
-									htmlFor={field.name}
-									error={field.state.meta.errors[0]?.message}
-								>
-									<Input
-										id={field.name}
-										type="password"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</form.Field>
-						<form.Subscribe selector={(s) => s.isSubmitting}>
-							{(isSubmitting) => (
-								<Button type="submit" className="w-full" loading={isSubmitting}>
-									เข้าสู่ระบบ
-								</Button>
-							)}
-						</form.Subscribe>
-					</form>
-					<p className="text-center text-slate-500 text-sm">
-						ยังไม่มีบัญชี?{' '}
-						<Link to="/sign-up" className="text-brand-600 hover:underline">
-							สมัครสมาชิก
-						</Link>
-					</p>
+					<Button className="w-full" size="lg" loading={loading} onClick={handleSso}>
+						เข้าสู่ระบบด้วย KMITL SSO
+					</Button>
+					<p className="text-slate-400 text-xs">บัญชีจะถูกสร้างอัตโนมัติเมื่อเข้าสู่ระบบครั้งแรก</p>
 				</CardBody>
 			</Card>
 		</div>

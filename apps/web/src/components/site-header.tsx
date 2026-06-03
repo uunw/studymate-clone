@@ -62,16 +62,9 @@ export function SiteHeader({ user }: { user: SessionUser | null }) {
 							</Button>
 						</>
 					) : (
-						<>
-							<Link to="/sign-in">
-								<Button size="sm" variant="ghost">
-									เข้าสู่ระบบ
-								</Button>
-							</Link>
-							<Link to="/sign-up">
-								<Button size="sm">สมัครสมาชิก</Button>
-							</Link>
-						</>
+						<Link to="/sign-in">
+							<Button size="sm">เข้าสู่ระบบ KMITL</Button>
+						</Link>
 					)}
 				</div>
 			</div>

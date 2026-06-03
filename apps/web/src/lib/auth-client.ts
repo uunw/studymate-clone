@@ -1,1 +1,1 @@
-export { authClient, signIn, signOut, signUp, useSession } from '@repo/auth/client'
+export { authClient, signIn, signOut, useSession } from '@repo/auth/client'

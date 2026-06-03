@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermOfUseRouteImport } from './routes/term-of-use'
-import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -30,11 +29,6 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 const TermOfUseRoute = TermOfUseRouteImport.update({
   id: '/term-of-use',
   path: '/term-of-use',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignInRoute = SignInRouteImport.update({
@@ -121,7 +115,6 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/reviews': typeof ReviewsRoute
   '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/term-of-use': typeof TermOfUseRoute
   '/admin/curricula': typeof AdminCurriculaRoute
   '/admin/departments': typeof AdminDepartmentsRoute
@@ -140,7 +133,6 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/reviews': typeof ReviewsRoute
   '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/term-of-use': typeof TermOfUseRoute
   '/admin/curricula': typeof AdminCurriculaRoute
   '/admin/departments': typeof AdminDepartmentsRoute
@@ -160,7 +152,6 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/reviews': typeof ReviewsRoute
   '/sign-in': typeof SignInRoute
-  '/sign-up': typeof SignUpRoute
   '/term-of-use': typeof TermOfUseRoute
   '/admin/curricula': typeof AdminCurriculaRoute
   '/admin/departments': typeof AdminDepartmentsRoute
@@ -181,7 +172,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reviews'
     | '/sign-in'
-    | '/sign-up'
     | '/term-of-use'
     | '/admin/curricula'
     | '/admin/departments'
@@ -200,7 +190,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reviews'
     | '/sign-in'
-    | '/sign-up'
     | '/term-of-use'
     | '/admin/curricula'
     | '/admin/departments'
@@ -219,7 +208,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reviews'
     | '/sign-in'
-    | '/sign-up'
     | '/term-of-use'
     | '/admin/curricula'
     | '/admin/departments'
@@ -239,7 +227,6 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   ReviewsRoute: typeof ReviewsRoute
   SignInRoute: typeof SignInRoute
-  SignUpRoute: typeof SignUpRoute
   TermOfUseRoute: typeof TermOfUseRoute
   AdminCurriculaRoute: typeof AdminCurriculaRoute
   AdminDepartmentsRoute: typeof AdminDepartmentsRoute
@@ -258,13 +245,6 @@ declare module '@tanstack/react-router' {
       path: '/term-of-use'
       fullPath: '/term-of-use'
       preLoaderRoute: typeof TermOfUseRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-in': {
@@ -383,7 +363,6 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   ReviewsRoute: ReviewsRoute,
   SignInRoute: SignInRoute,
-  SignUpRoute: SignUpRoute,
   TermOfUseRoute: TermOfUseRoute,
   AdminCurriculaRoute: AdminCurriculaRoute,
   AdminDepartmentsRoute: AdminDepartmentsRoute,

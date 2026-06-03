@@ -15,8 +15,10 @@
 
 ## ✨ Features
 
-- 🔐 **Auth** — sign up with an 8-digit KMITL student id + email OTP verification,
-  sign in by student id, Google OAuth (kmitl.ac.th restricted) — via **Better Auth**.
+- 🔐 **Auth** — sign in with your real **KMITL account** via SSO (OpenID Connect,
+  configured as a generic OIDC provider through **Better Auth**'s `genericOAuth`
+  plugin). Accounts are auto-provisioned on first login; the 8-digit student id is
+  read from the OIDC claims.
 - 📚 **Subjects** — browse, search, and paginate the course catalog; per-subject
   average rating + review count.
 - ⭐ **Reviews** — write/replace a review per (subject, year, term), rate 0.5–5 stars,
@@ -34,7 +36,7 @@
 | Data | **TanStack Query** v5 (loader-prefetch + `useSuspenseQuery`) |
 | Forms | **TanStack Form** v1 + **Zod** (Standard Schema) |
 | ORM / DB | **Drizzle ORM** + **PostgreSQL** (local) / **Neon** (prod) |
-| Auth | **Better Auth** (username + email-OTP + Google plugins) |
+| Auth | **Better Auth** (`genericOAuth` → KMITL OIDC SSO) |
 | UI | **React 19** + **Tailwind CSS v4** (CSS-first `@theme`) |
 | Utils | **Remeda**, **date-fns** v4, **Jotai** |
 | Tooling | **Turborepo** + **pnpm** workspaces, **Biome**, **Vitest** |
@@ -72,24 +74,26 @@ cp .env.example .env          # defaults work for local docker Postgres
 # 3. start Postgres
 docker compose up -d
 
-# 4. create schema + seed reference data + a demo admin
+# 4. create schema + seed reference data
 pnpm db:migrate
 pnpm db:seed                  # faculties, subjects, teachtables…
-pnpm --filter @repo/auth seed # demo admin (see below)
 
 # 5. run
 pnpm dev                      # http://localhost:3000
 ```
 
-### Demo account
+### Logging in
 
-```
-Student ID : 64010001
-Password   : Test@1234
-```
+Login uses **KMITL SSO**. Set `KMITL_SSO_CLIENT_ID` / `KMITL_SSO_CLIENT_SECRET` /
+`KMITL_SSO_ISSUER` in `.env` (register an SSO client at
+[developer.kmitl.ac.th](https://developer.kmitl.ac.th) and add the redirect URI
+`http://localhost:3000/api/auth/oauth2/callback/kmitl`). Until those are set, public
+pages work but sign-in is disabled. First login auto-creates the account; to grant
+admin, flip the flag on your user row:
 
-> In dev (no SMTP configured), email OTP codes are printed to the **server console**
-> instead of being emailed.
+```sql
+UPDATE "user" SET is_admin = true WHERE username = '<your-student-id>';
+```
 
 ## 📜 Scripts
 
@@ -121,8 +125,8 @@ The app is **deploy-ready** but intentionally not deployed here.
    | `DATABASE_URL` | Neon pooled connection string |
    | `BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
    | `BETTER_AUTH_URL` | your production URL |
-   | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional, for Google sign-in |
-   | `SMTP_*` | optional, to actually send OTP emails |
+   | `KMITL_SSO_CLIENT_ID` / `KMITL_SSO_CLIENT_SECRET` | from the KMITL SSO client |
+   | `KMITL_SSO_ISSUER` | OIDC issuer (discovery is derived from it) |
 
 The stack is portable — Drizzle + Postgres, Better Auth, and TanStack Start (via Nitro)
 all run on Cloudflare/Netlify/Fly with config changes only, so you are not locked in.
