@@ -82,6 +82,11 @@ export const curriculum = pgTable('curriculum', {
 	nameTh: varchar('name_th', { length: 256 }),
 	nameEn: varchar('name_en', { length: 256 }),
 	isVisible: integer('is_visible').default(1).notNull(),
+	// registrar teach-table codes (get-teach-table-show by_class), for fetching
+	// this curriculum's curated subject list (e.g. 01 / 05 / 101).
+	regFacultyId: varchar('reg_faculty_id', { length: 8 }),
+	regDepartmentId: varchar('reg_department_id', { length: 8 }),
+	regCurriculumId: varchar('reg_curriculum_id', { length: 8 }),
 })
 
 // ---- Subjects ----

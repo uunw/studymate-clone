@@ -9,11 +9,9 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import type { Detail } from '~/components/my-subjects-types'
 import {
-	departmentsQuery,
-	facultiesQuery,
+	curriculumElectivesQuery,
 	myCurriculumTreeQuery,
 	myTranscriptQuery,
-	offeredElectivesQuery,
 	registrationPlanQuery,
 	subjectSchedulesQuery,
 } from '~/queries'
@@ -341,6 +339,7 @@ function ProgressView({
 					<GroupNode
 						key={g.id}
 						group={g}
+						curriculumId={tree.curriculum.id}
 						courseInfo={courseInfo}
 						groupSubjects={groupSubjects}
 						takenSet={takenSet}
@@ -409,36 +408,26 @@ function ProjectionSummary({
  *  offered this term (registrar teach-table → local subject_class), filter by
  *  name/code, page through them, and add the ones to count toward เลือกเสรี. */
 function FreeElectivePicker({
+	curriculumId,
 	picks,
 	takenSet,
 	onPick,
 	onRemove,
 }: {
+	curriculumId: number
 	picks: Map<string, { name: string; credit: number }>
 	takenSet: Set<string>
 	onPick: (s: { id: string; name: string; credit: number }) => void
 	onRemove: (id: string) => void
 }) {
 	const [q, setQ] = useState('')
-	const [applied, setApplied] = useState('')
-	const [page, setPage] = useState(1)
-	const [facultyId, setFacultyId] = useState(0)
-	const [departmentId, setDepartmentId] = useState(0)
-	const [includeRestricted, setIncludeRestricted] = useState(false)
-	const { data: faculties } = useQuery(facultiesQuery())
-	const { data: departments } = useQuery({
-		...departmentsQuery(facultyId || undefined),
-		enabled: facultyId > 0,
-	})
-	const { data } = useQuery(
-		offeredElectivesQuery({
-			q: applied || undefined,
-			facultyId: facultyId || undefined,
-			departmentId: departmentId || undefined,
-			includeRestricted,
-			page,
-			pageSize: 8,
-		}),
+	const { data, isPending } = useQuery(curriculumElectivesQuery(curriculumId))
+	const list = (data ?? []).filter(
+		(s) =>
+			!q.trim() ||
+			s.id.includes(q.trim()) ||
+			(s.nameTh ?? '').includes(q.trim()) ||
+			(s.nameEn ?? '').toLowerCase().includes(q.trim().toLowerCase()),
 	)
 
 	return (
@@ -467,148 +456,64 @@ function FreeElectivePicker({
 					))}
 				</ul>
 			)}
-			<p className="text-slate-500 text-xs">เลือกจากวิชาที่เปิดสอนเทอมนี้:</p>
-			<div className="flex flex-wrap gap-2">
-				<select
-					value={facultyId}
-					onChange={(e) => {
-						setFacultyId(Number(e.target.value))
-						setDepartmentId(0)
-						setPage(1)
-					}}
-					className="rounded-md border border-slate-200 px-2 py-1 text-xs"
-				>
-					<option value={0}>ทุกคณะ</option>
-					{(faculties ?? []).map((f) => (
-						<option key={f.id} value={f.id}>
-							{f.nameTh}
-						</option>
-					))}
-				</select>
-				{facultyId > 0 && (
-					<select
-						value={departmentId}
-						onChange={(e) => {
-							setDepartmentId(Number(e.target.value))
-							setPage(1)
-						}}
-						className="rounded-md border border-slate-200 px-2 py-1 text-xs"
-					>
-						<option value={0}>ทุกภาควิชา</option>
-						{(departments ?? []).map((d) => (
-							<option key={d.id} value={d.id}>
-								{d.nameTh}
-							</option>
-						))}
-					</select>
-				)}
-			</div>
-			<label className="flex items-center gap-1.5 text-slate-500 text-xs">
-				<input
-					type="checkbox"
-					checked={includeRestricted}
-					onChange={(e) => {
-						setIncludeRestricted(e.target.checked)
-						setPage(1)
-					}}
-				/>
-				แสดงวิชาที่ติดเงื่อนไข/ลงไม่ได้ด้วย
-			</label>
-			<form
-				className="flex gap-2"
-				onSubmit={(e) => {
-					e.preventDefault()
-					setApplied(q.trim())
-					setPage(1)
-				}}
-			>
-				<input
-					value={q}
-					onChange={(e) => setQ(e.target.value)}
-					placeholder="กรองด้วยชื่อ/รหัสวิชา…"
-					className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs"
-				/>
-				<button
-					type="submit"
-					className="shrink-0 rounded-md bg-brand-50 px-3 py-1 font-medium text-brand-700 text-xs hover:bg-brand-100"
-				>
-					กรอง
-				</button>
-			</form>
-			{data && (
-				<>
-					<ul className="space-y-1">
-						{data.items.length === 0 ? (
-							<li className="text-slate-400 text-xs">ไม่พบวิชาที่เปิดสอน</li>
-						) : (
-							data.items.map((s) => {
-								const picked = picks.has(s.id)
-								const taken = takenSet.has(s.id)
-								return (
-									<li key={s.id} className="flex items-start gap-2 text-xs">
-										<div className="min-w-0 flex-1">
-											<Link
-												to="/subjects/$subjectId"
-												params={{ subjectId: s.id }}
-												className="block truncate text-slate-600 hover:text-brand-700"
-											>
-												{s.id} {s.nameTh ?? s.nameEn}
-											</Link>
-											{s.ruleTh && (
-												<p className="truncate text-[11px] text-amber-600" title={s.ruleTh}>
-													⚠ {s.ruleTh}
-												</p>
-											)}
-										</div>
-										<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
-										{taken ? (
-											<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>
-										) : picked ? (
-											<span className="shrink-0 text-amber-600 text-[11px]">เลือกแล้ว</span>
-										) : (
-											<button
-												type="button"
-												onClick={() =>
-													onPick({
-														id: s.id,
-														name: s.nameTh ?? s.nameEn ?? s.id,
-														credit: s.credit ?? 0,
-													})
-												}
-												className="shrink-0 text-brand-700 hover:underline"
-											>
-												+ เพิ่ม
-											</button>
-										)}
-									</li>
-								)
-							})
-						)}
-					</ul>
-					{data.totalPages > 1 && (
-						<div className="flex items-center justify-center gap-3 text-slate-500 text-xs">
-							<button
-								type="button"
-								disabled={page <= 1}
-								onClick={() => setPage((p) => p - 1)}
-								className="disabled:opacity-40"
-							>
-								‹ ก่อนหน้า
-							</button>
-							<span>
-								{data.page}/{data.totalPages}
-							</span>
-							<button
-								type="button"
-								disabled={page >= data.totalPages}
-								onClick={() => setPage((p) => p + 1)}
-								className="disabled:opacity-40"
-							>
-								ถัดไป ›
-							</button>
-						</div>
-					)}
-				</>
+
+			<p className="text-slate-500 text-xs">วิชาเลือกเสรีที่หลักสูตรเปิดให้เลือก (จาก KMITL registrar):</p>
+			<input
+				value={q}
+				onChange={(e) => setQ(e.target.value)}
+				placeholder="กรองด้วยชื่อ/รหัสวิชา…"
+				className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs"
+			/>
+
+			{isPending ? (
+				<p className="text-slate-400 text-xs">กำลังโหลด…</p>
+			) : list.length === 0 ? (
+				<p className="text-slate-400 text-xs">ไม่พบวิชาเลือกเสรีสำหรับหลักสูตรนี้</p>
+			) : (
+				<ul className="space-y-1">
+					{list.map((s) => {
+						const picked = picks.has(s.id)
+						const taken = takenSet.has(s.id)
+						return (
+							<li key={s.id} className="flex items-start gap-2 text-xs">
+								<div className="min-w-0 flex-1">
+									<Link
+										to="/subjects/$subjectId"
+										params={{ subjectId: s.id }}
+										className="block truncate text-slate-600 hover:text-brand-700"
+									>
+										{s.id} {s.nameTh ?? s.nameEn}
+									</Link>
+									{s.ruleTh && (
+										<p className="truncate text-[11px] text-slate-400" title={s.ruleTh}>
+											{s.ruleTh}
+										</p>
+									)}
+								</div>
+								<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
+								{taken ? (
+									<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>
+								) : picked ? (
+									<span className="shrink-0 text-amber-600 text-[11px]">เลือกแล้ว</span>
+								) : (
+									<button
+										type="button"
+										onClick={() =>
+											onPick({
+												id: s.id,
+												name: s.nameTh ?? s.nameEn ?? s.id,
+												credit: s.credit ?? 0,
+											})
+										}
+										className="shrink-0 text-brand-700 hover:underline"
+									>
+										+ เพิ่ม
+									</button>
+								)}
+							</li>
+						)
+					})}
+				</ul>
 			)}
 		</div>
 	)
@@ -625,6 +530,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
 
 function GroupNode({
 	group,
+	curriculumId,
 	courseInfo,
 	groupSubjects,
 	takenSet,
@@ -638,6 +544,7 @@ function GroupNode({
 	depth,
 }: {
 	group: ProgressGroupResult
+	curriculumId: number
 	courseInfo: Map<string, { name: string; grade: string | null }>
 	groupSubjects: Map<number, GroupSubjectInfo[]>
 	takenSet: Set<string>
@@ -695,6 +602,7 @@ function GroupNode({
 
 			{isFree && (
 				<FreeElectivePicker
+					curriculumId={curriculumId}
 					picks={freePicks}
 					takenSet={takenSet}
 					onPick={onPickFree}
@@ -774,6 +682,7 @@ function GroupNode({
 						<GroupNode
 							key={c.id}
 							group={c}
+							curriculumId={curriculumId}
 							courseInfo={courseInfo}
 							groupSubjects={groupSubjects}
 							takenSet={takenSet}

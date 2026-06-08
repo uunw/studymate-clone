@@ -325,6 +325,143 @@ export const listOfferedElectives = createServerFn({ method: 'GET' })
 		}
 	})
 
+export type CurriculumElective = {
+	id: string
+	nameTh: string | null
+	nameEn: string | null
+	credit: number | null
+	ruleTh: string | null
+}
+
+/**
+ * The free-elective options for a curriculum, taken straight from the registrar's
+ * curated teach-table (get-teach-table-show by_class) — the "กลุ่ม 1 (วิชา GenEd /
+ * วิชาเลือกเสรี)" group across all class-year blocks. This is exactly the short list
+ * the registrar website shows for the curriculum, already filtered by major /
+ * class-year. Needs the curriculum's stored registrar codes.
+ */
+export const listCurriculumElectives = createServerFn({ method: 'GET' })
+	.inputValidator((curriculumId: number) => curriculumId)
+	.handler(async ({ data: curriculumId }): Promise<CurriculumElective[]> => {
+		const { readUser } = await import('./auth.server')
+		const user = await readUser()
+		const studentId = Number(user?.username ?? Number.NaN)
+
+		const [c] = await db
+			.select({
+				rf: schema.curriculum.regFacultyId,
+				rd: schema.curriculum.regDepartmentId,
+				rc: schema.curriculum.regCurriculumId,
+			})
+			.from(schema.curriculum)
+			.where(eq(schema.curriculum.id, curriculumId))
+			.limit(1)
+		if (!c?.rf || !c?.rd || !c?.rc) return []
+
+		const [tt] = await db
+			.select({ year: schema.teachtable.year, term: schema.teachtable.term })
+			.from(schema.teachtable)
+			.orderBy(desc(schema.teachtable.year), desc(schema.teachtable.term))
+			.limit(1)
+		if (!tt) return []
+
+		// Student's class year from the id's admission year (e.g. 67… → 2567);
+		// match the registrar's per-class-year view so the list isn't every year.
+		const admYear = Number.isFinite(studentId)
+			? 2500 + Math.floor(studentId / 1_000_000)
+			: Number.NaN
+		const classYear = Number.isFinite(admYear) ? Math.min(8, Math.max(1, tt.year - admYear + 1)) : 1
+		const searchAllClassYear = !Number.isFinite(admYear)
+
+		const url =
+			`https://regis.reg.kmitl.ac.th/api/?function=get-teach-table-show&mode=by_class` +
+			`&selected_year=${tt.year}&selected_semester=${tt.term}&selected_faculty=${c.rf}` +
+			`&selected_department=${c.rd}&selected_curriculum=${c.rc}&selected_class_year=${classYear}` +
+			`&search_all_faculty=false&search_all_department=false&search_all_curriculum=false&search_all_class_year=${searchAllClassYear}`
+
+		type Sec = {
+			subject_id: string
+			subject_name_th?: string
+			subject_name_en?: string
+			credit?: string
+			rules_th?: string
+		}
+		type Group = { subject_type_name_th?: string; data?: Sec[] }
+		type Block = {
+			teachtable?: Group[]
+			curriculum_name_th?: string
+			faculty_name_th?: string
+		}
+		let blocks: Record<string, Block> = {}
+		try {
+			const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+			blocks = (await res.json()) as Record<string, Block>
+		} catch {
+			return []
+		}
+
+		const stripHtml = (s?: string | null) =>
+			s
+				? s
+						.replace(/<[^>]*>/g, ' ')
+						.replace(/\s+/g, ' ')
+						.trim() || null
+				: null
+		const num = (s?: string) => {
+			const n = Number.parseInt(s ?? '', 10)
+			return Number.isFinite(n) ? n : null
+		}
+
+		// Student context (major token + faculty) from the curriculum block itself.
+		const first = Object.values(blocks)[0]
+		const ctx = {
+			major: majorToken(first?.curriculum_name_th) || undefined,
+			faculty: first?.faculty_name_th ?? undefined,
+		}
+
+		// Gather every GenEd/เลือกเสรี section; a subject is eligible if any of its
+		// sections admits the student (matches the website's curated list).
+		const acc = new Map<string, CurriculumElective & { open: boolean; chosen: boolean }>()
+		for (const block of Object.values(blocks)) {
+			for (const g of block.teachtable ?? []) {
+				if (!/เลือกเสรี|GenEd|ศึกษาทั่วไป/i.test(g.subject_type_name_th ?? '')) continue
+				for (const s of g.data ?? []) {
+					if (!s.subject_id) continue
+					const rule = stripHtml(s.rules_th)
+					const open = isSectionOpenToStudent(rule, studentId, ctx)
+					let e = acc.get(s.subject_id)
+					if (!e) {
+						e = {
+							id: s.subject_id,
+							nameTh: s.subject_name_th ?? null,
+							nameEn: s.subject_name_en ?? null,
+							credit: num(s.credit),
+							ruleTh: null,
+							open: false,
+							chosen: false,
+						}
+						acc.set(s.subject_id, e)
+					}
+					if (open) {
+						e.open = true
+						if (!hasCondition(rule)) {
+							e.ruleTh = null
+							e.chosen = true
+						} else if (!e.chosen) {
+							e.ruleTh = rule
+						}
+					}
+				}
+			}
+		}
+
+		const eligibleOnly = Number.isFinite(studentId)
+		return [...acc.values()]
+			.filter((e) => (eligibleOnly ? e.open : true))
+			.sort((a, b) => a.id.localeCompare(b.id))
+			.map(({ open: _open, chosen: _chosen, ...e }) => e)
+	})
+
 export type SubjectSchedule = {
 	subjectId: string | null
 	section: string | null

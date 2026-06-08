@@ -29,6 +29,13 @@
       "when": 1780910773997,
       "tag": "0003_sticky_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780912674988,
+      "tag": "0004_unknown_exodus",
+      "breakpoints": true
     }
   ]
 }

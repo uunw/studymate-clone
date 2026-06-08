@@ -673,6 +673,15 @@ async function main() {
 			]),
 		)
 
+	// 2d. Registrar teach-table codes for this curriculum (faculty 01 / dept 05 /
+	// curriculum 101), so the free-elective picker can pull its curated list.
+	await db
+		.update(schema.curriculum)
+		.set({ regFacultyId: '01', regDepartmentId: '05', regCurriculumId: '101' })
+		.where(
+			eq(schema.curriculum.nameEn, 'Bachelor of Engineering in Computer Engineering (Continuing)'),
+		)
+
 	// 3. group↔subject links — resolve group ids by name, add any that are missing.
 	const names = [...new Set(SUBJECTS.map((s) => GROUP_NAME[s.group]!))]
 	const grows = await db

@@ -14,6 +14,7 @@ import {
 import {
 	getSubject,
 	getSubjectSchedules,
+	listCurriculumElectives,
 	listCurriculumGroupOptions,
 	listOfferedElectives,
 	listSectionsForSubject,
@@ -74,6 +75,12 @@ export const curriculumReviewsQuery = () =>
 
 export const teachtablesQuery = () =>
 	queryOptions({ queryKey: ['teachtables'], queryFn: () => listTeachtables() })
+
+export const curriculumElectivesQuery = (curriculumId: number) =>
+	queryOptions({
+		queryKey: ['curriculum-electives', curriculumId],
+		queryFn: () => listCurriculumElectives({ data: curriculumId }),
+	})
 
 export type OfferedElectivesParams = {
 	q?: string
