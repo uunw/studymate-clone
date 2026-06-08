@@ -195,3 +195,20 @@ export const transcriptDetail = pgTable('transcript_detail', {
 	teachtableId: integer('teachtable_id').references(() => teachtable.id, { onDelete: 'set null' }),
 	grade: varchar('grade', { length: 4 }),
 })
+
+// ---- Saved what-if registration plan (the progress-tab simulation) ----
+
+export const planSubject = pgTable(
+	'plan_subject',
+	{
+		id: serial('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		subjectId: varchar('subject_id', { length: 16 }).notNull(),
+		credit: integer('credit'),
+		name: text('name'),
+		isFree: boolean('is_free').default(false).notNull(),
+	},
+	(t) => [unique('plan_user_subject_uq').on(t.userId, t.subjectId)],
+)

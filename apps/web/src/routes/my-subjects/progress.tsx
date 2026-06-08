@@ -4,21 +4,26 @@ import {
 	type ProgressResult,
 } from '@repo/core/progress'
 import { Badge, Button, Card, CardBody, EmptyState, ProgressBar } from '@repo/ui'
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import type { Detail } from '~/components/my-subjects-types'
 import {
 	curriculumElectivesQuery,
 	myCurriculumTreeQuery,
+	myPlanSelectionQuery,
 	myTranscriptQuery,
 	registrationPlanQuery,
 	subjectSchedulesQuery,
 } from '~/queries'
+import { savePlanSelection } from '~/server/plan'
 import type { CurriculumTree } from '~/server/progress'
 import type { SubjectSchedule } from '~/server/subjects'
 
 export const Route = createFileRoute('/my-subjects/progress')({
+	loader: async ({ context }) => {
+		await context.queryClient.ensureQueryData(myPlanSelectionQuery())
+	},
 	component: ProgressTab,
 })
 
@@ -146,50 +151,92 @@ function ProgressView({
 		return m
 	}, [groupSubjects, planned, freePicks])
 
-	// What-if simulation set: defaults to the registrar plan; the user can tick
-	// subjects, auto-fill to complete, reset, or clear. `dirty` stops the
-	// default-to-plan effect once the user has touched it.
+	// What-if simulation set. Defaults to the registrar plan, but is persisted per
+	// user: a saved selection (from a previous visit) hydrates it and survives
+	// navigation. `dirty` = the user has a saved/explicit selection, which stops
+	// the default-to-plan effect.
+	const qc = useQueryClient()
+	const { data: saved } = useSuspenseQuery(myPlanSelectionQuery())
 	const [simulated, setSimulated] = useState<Set<string>>(new Set())
 	const [dirty, setDirty] = useState(false)
+	const [hydrated, setHydrated] = useState(false)
+
+	// Hydrate once from the saved selection.
 	useEffect(() => {
-		if (!dirty) setSimulated(new Set(recommended))
-	}, [recommended, dirty])
+		if (hydrated) return
+		if (saved.length) {
+			setSimulated(new Set(saved.map((s) => s.subjectId)))
+			setFreePicks(
+				new Map(
+					saved
+						.filter((s) => s.isFree)
+						.map((s) => [s.subjectId, { name: s.name ?? s.subjectId, credit: s.credit ?? 0 }]),
+				),
+			)
+			setDirty(true)
+		}
+		setHydrated(true)
+	}, [saved, hydrated])
+
+	// Default to the registrar plan while untouched + nothing saved.
+	useEffect(() => {
+		if (hydrated && !dirty) setSimulated(new Set(recommended))
+	}, [recommended, dirty, hydrated])
+
+	// Persist the full selection (fire-and-forget) and keep the query cache in sync
+	// so navigating away and back restores it. Local state is the source of truth.
+	const persist = (
+		nextSim: Set<string>,
+		nextFree: Map<string, { name: string; credit: number }>,
+	) => {
+		const items = [...nextSim].map((id) => {
+			const fp = nextFree.get(id)
+			return {
+				subjectId: id,
+				credit: fp?.credit ?? creditOf.get(id) ?? null,
+				name: fp?.name ?? courseInfo.get(id)?.name ?? null,
+				isFree: nextFree.has(id),
+			}
+		})
+		qc.setQueryData(['my-plan-selection'], items)
+		savePlanSelection({ data: items }).catch(() => {})
+	}
+	const commit = (
+		nextSim: Set<string>,
+		nextFree: Map<string, { name: string; credit: number }>,
+	) => {
+		setDirty(true)
+		setSimulated(nextSim)
+		setFreePicks(nextFree)
+		persist(nextSim, nextFree)
+	}
 
 	const toggleSim = (id: string) => {
-		setDirty(true)
-		setSimulated((prev) => {
-			const next = new Set(prev)
-			if (next.has(id)) next.delete(id)
-			else next.add(id)
-			return next
-		})
+		const next = new Set(simulated)
+		if (next.has(id)) next.delete(id)
+		else next.add(id)
+		commit(next, freePicks)
 	}
 	const resetToPlan = () => {
 		setDirty(false)
 		setSimulated(new Set(recommended))
 		setFreePicks(new Map())
+		qc.setQueryData(['my-plan-selection'], [])
+		savePlanSelection({ data: [] }).catch(() => {})
 	}
 	const clearSim = () => {
-		setDirty(true)
-		setSimulated(new Set())
-		setFreePicks(new Map())
+		commit(new Set(), new Map())
 	}
 	const pickFree = (s: { id: string; name: string; credit: number }) => {
-		setDirty(true)
-		setFreePicks((prev) => new Map(prev).set(s.id, { name: s.name, credit: s.credit }))
-		setSimulated((prev) => new Set(prev).add(s.id))
+		const nf = new Map(freePicks).set(s.id, { name: s.name, credit: s.credit })
+		commit(new Set(simulated).add(s.id), nf)
 	}
 	const removeFree = (id: string) => {
-		setFreePicks((prev) => {
-			const next = new Map(prev)
-			next.delete(id)
-			return next
-		})
-		setSimulated((prev) => {
-			const next = new Set(prev)
-			next.delete(id)
-			return next
-		})
+		const nf = new Map(freePicks)
+		nf.delete(id)
+		const ns = new Set(simulated)
+		ns.delete(id)
+		commit(ns, nf)
 	}
 
 	const simulatedCredit = useMemo(

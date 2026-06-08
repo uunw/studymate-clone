@@ -2,6 +2,7 @@ import type { SubjectFilter } from '@repo/core/schemas'
 import { queryOptions } from '@tanstack/react-query'
 import { getCurriculumGroupTree } from '~/server/curriculum-group'
 import { listCurricula, listDepartments, listFaculties, listPrograms } from '~/server/hierarchy'
+import { getMyPlanSelection } from '~/server/plan'
 import { getMyCurriculumTree } from '~/server/progress'
 import { getRegistrationPlan } from '~/server/registration'
 import {
@@ -134,6 +135,9 @@ export const myTranscriptQuery = () =>
 
 export const myCurriculumTreeQuery = () =>
 	queryOptions({ queryKey: ['my-curriculum-tree'], queryFn: () => getMyCurriculumTree() })
+
+export const myPlanSelectionQuery = () =>
+	queryOptions({ queryKey: ['my-plan-selection'], queryFn: () => getMyPlanSelection() })
 
 export const registrationPlanQuery = (studentId?: string) =>
 	queryOptions({
