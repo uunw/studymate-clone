@@ -1,8 +1,7 @@
 import { db, schema } from '@repo/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError } from 'better-auth/api'
-import { genericOAuth } from 'better-auth/plugins'
+import { genericOAuth, username } from 'better-auth/plugins'
 
 /** Real KMITL accounts are <studentId>@kmitl.ac.th. */
 export const KMITL_EMAIL_DOMAIN = 'kmitl.ac.th'
@@ -75,37 +74,33 @@ export const auth = betterAuth({
 		},
 	}),
 
+	// Email + password fallback (KMITL SSO is primary; this keeps the app usable
+	// before the SSO client is provisioned). Login by email or by student-id username.
+	emailAndPassword: {
+		enabled: true,
+		autoSignIn: true,
+		minPasswordLength: 8,
+	},
+
 	// StudyMate profile columns live on the user table. `username` holds the
 	// 8-digit student id, mapped from the OIDC claims at first sign-in.
 	user: {
 		additionalFields: {
-			username: { type: 'string', required: false, input: false },
-			firstName: { type: 'string', required: false, input: false },
-			lastName: { type: 'string', required: false, input: false },
-			nickname: { type: 'string', required: false, input: false },
+			firstName: { type: 'string', required: false },
+			lastName: { type: 'string', required: false },
+			nickname: { type: 'string', required: false },
 			isAdmin: { type: 'boolean', required: false, defaultValue: false, input: false },
 			curriculumId: { type: 'number', required: false },
 			policyViewed: { type: 'boolean', required: false, defaultValue: false, input: false },
 		},
 	},
 
-	databaseHooks: {
-		user: {
-			create: {
-				before: async (user) => {
-					// Defence-in-depth: only allow KMITL accounts.
-					if (!user.email.toLowerCase().endsWith(`@${KMITL_EMAIL_DOMAIN}`)) {
-						throw new APIError('BAD_REQUEST', {
-							message: `Only @${KMITL_EMAIL_DOMAIN} accounts are allowed`,
-						})
-					}
-					return { data: user }
-				},
-			},
-		},
-	},
-
 	plugins: [
+		username({
+			minUsernameLength: 8,
+			maxUsernameLength: 8,
+			usernameValidator: (value) => STUDENT_ID_RE.test(value),
+		}),
 		genericOAuth({
 			config: ssoEnabled
 				? [

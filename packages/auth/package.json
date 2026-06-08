@@ -9,6 +9,7 @@
 		"./server": "./src/server.ts"
 	},
 	"scripts": {
+		"seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run --passWithNoTests",
 		"clean": "rm -rf dist .turbo"
@@ -19,6 +20,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "catalog:",
+		"tsx": "^4.19.0",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	}
