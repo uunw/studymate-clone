@@ -102,16 +102,8 @@ function ProgressView({
 		return m
 	}, [groupSubjects, planned])
 
-	// Every curriculum subject the student hasn't taken yet (for "register all").
-	const allUntaken = useMemo(() => {
-		const s = new Set<string>()
-		for (const list of groupSubjects.values())
-			for (const x of list) if (!takenSet.has(x.id)) s.add(x.id)
-		return s
-	}, [groupSubjects, takenSet])
-
 	// What-if simulation set: defaults to the registrar plan; the user can tick
-	// subjects, "register everything left", reset, or clear. `dirty` stops the
+	// subjects, auto-fill to complete, reset, or clear. `dirty` stops the
 	// default-to-plan effect once the user has touched it.
 	const [simulated, setSimulated] = useState<Set<string>>(new Set())
 	const [dirty, setDirty] = useState(false)
@@ -127,10 +119,6 @@ function ProgressView({
 			else next.add(id)
 			return next
 		})
-	}
-	const simulateAllRemaining = () => {
-		setDirty(true)
-		setSimulated(new Set(allUntaken))
 	}
 	const resetToPlan = () => {
 		setDirty(false)
@@ -213,12 +201,17 @@ function ProgressView({
 						tone={progress.complete ? 'green' : 'brand'}
 					/>
 
+					{!progress.complete && (
+						<p className="text-slate-500 text-xs">
+							🎓 เรียนให้ครบหลักสูตรต้องอีก{' '}
+							<span className="font-semibold text-slate-700">{progress.remaining} นก.</span> (≈{' '}
+							{Math.ceil(progress.remaining / 18)} เทอม) — ติ๊กวิชาด้านล่างเพื่อจำลองว่าจะลงตัวไหน
+						</p>
+					)}
+
 					<div className="space-y-2">
 						<div className="flex flex-wrap items-center gap-2 text-xs">
 							<span className="text-slate-500">จำลองการลงทะเบียน:</span>
-							<Button size="sm" variant="secondary" onClick={simulateAllRemaining}>
-								ลงครบทุกวิชาที่เหลือ
-							</Button>
 							<Button size="sm" variant="ghost" onClick={resetToPlan}>
 								แผนเทอมนี้
 							</Button>
@@ -229,14 +222,12 @@ function ProgressView({
 							)}
 							{simulated.size > 0 && (
 								<span className="font-medium text-amber-700">
-									{simulated.size} วิชา · +{simulatedCredit} นก.
+									จำลอง {simulated.size} วิชา · +{simulatedCredit} นก.
 								</span>
 							)}
 						</div>
 						{simulatedCredit > 27 && (
-							<p className="text-amber-700 text-xs">
-								⚠ ถ้าลงทั้งหมดนี้ในเทอมเดียวจะเกินเพดาน ~27 นก./เทอม — ควรแบ่งหลายเทอม
-							</p>
+							<p className="text-amber-700 text-xs">⚠ ลงเกินเพดาน ~27 นก./เทอม — ควรแบ่งหลายเทอม</p>
 						)}
 					</div>
 
@@ -307,7 +298,9 @@ function ProjectionSummary({
 				<span className="text-amber-600"> (ตอนนี้ {current.percent}%)</span>
 			</p>
 			{projected.complete ? (
-				<p className="font-medium text-green-700">ครบทุกหมวดของหลักสูตรแล้ว 🎉</p>
+				<p className="font-medium text-green-700">
+					ครบทุกหมวดของหลักสูตรแล้ว 🎉 (ลงเพิ่มอีก {added} นก. · ~{Math.ceil(added / 18)} เทอม)
+				</p>
 			) : (
 				<p className="text-amber-700">
 					หลังจากนั้นเหลืออีก <span className="font-semibold">{remaining} นก.</span> (≈ {estSubjects} วิชา
