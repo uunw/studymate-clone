@@ -23,8 +23,9 @@ Remeda · date-fns · Biome · Vitest.
     pnpm dev                        # :3000
 Verify chain (= CI): pnpm lint · pnpm typecheck · pnpm test · pnpm build
 
-## Auth — KMITL SSO only
-Better Auth genericOAuth, generic OIDC provider id `kmitl`.
+## Auth — KMITL SSO (+ email/password fallback)
+Better Auth genericOAuth, generic OIDC provider id `kmitl`. Email+password and `username`
+(8-digit student id) login also work as a fallback while SSO is blocked.
 Env: KMITL_SSO_CLIENT_ID / _SECRET / _ISSUER (https://sso.kmitl.ac.th/realms/master) /
 _STUDENT_ID_CLAIM. Callback: /api/auth/oauth2/callback/kmitl.
 Register client at developer.kmitl.ac.th. Grant admin: UPDATE "user" SET is_admin=true.
@@ -40,8 +41,24 @@ Register client at developer.kmitl.ac.th. Grant admin: UPDATE "user" SET is_admi
 - KMITL SSO: clients created in Developer Hub can show SYNC=done but Keycloak returns
   "Client not found" (provisioning gap) — see second-brain wiki concepts/kmitl-sso.
 - Build emits dist/ (no node listener) — deploy via Vercel (auto-detects TanStack Start).
+- KMITL `teach_day` is 1 = อาทิตย์ … 7 = เสาร์ (NOT 1 = Monday). Day labels/filters use this;
+  stored values are already in KMITL numbering — don't shift them.
+- Registrar teach-table (get-teach-table-show by_class) uses NUMERIC codes (faculty 01 /
+  dept 05 / curriculum 101), distinct from the seeded program/dept kmitlId ('010102'/'0101').
+  Stored on curriculum.reg{Faculty,Department,Curriculum}Id. The free-elective list = the
+  registrar's curated per-curriculum "กลุ่ม 1 (GenEd/เลือกเสรี)" group (class_year derived from
+  the 8-digit student id), NOT catalog-wide filtering.
+- Free electives are gated by เงื่อนไข (subject_class.rule_th): student-id range/set + major/
+  faculty; @repo/core/eligibility.isSectionOpenToStudent parses it.
 
 ## Recent session log
+### 2026-06-08 — feature parity + registration planning
+Migrated all remaining original features; built the /my-subjects registration-planning system:
+registrar pre-reg plan (get-pattern-subject), projected progress (amber) + persisted what-if
+(plan_subject), free-elective picker from the curated per-curriculum teach-table + eligibility
+filter, class/exam clash warnings, "เปิดสอน" badges (day-time + ลงล่วงหน้า/รับ). subject_class +=
+exam/rule/remark/pre_count, curriculum += reg codes (migrations 0002–0006). Fixed day-of-week
+off-by-one. Latest commit 24a38e9.
 ### 2026-06-03 — initial build + KMITL SSO
 Built full monorepo; auth: username+OTP+Google → replaced with KMITL SSO (genericOAuth
 generic OIDC) + Single Logout + configurable student-id claim. SSO verified end-to-end
