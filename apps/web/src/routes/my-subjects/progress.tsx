@@ -21,7 +21,8 @@ import { savePlanSelection } from '~/server/plan'
 import type { CurriculumTree } from '~/server/progress'
 import type { OfferedSchedule, SubjectSchedule } from '~/server/subjects'
 
-const DAY_ABBR = ['', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา']
+// KMITL teach_day: 1 = อาทิตย์ … 7 = เสาร์.
+const DAY_ABBR = ['', 'อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '')
 /** "เปิดสอน · จ 09:00-12:00 +2 sec · 50/90" (ลงล่วงหน้า/รับ) for the badge. */
 function offeredLabel(o: OfferedSchedule): string {

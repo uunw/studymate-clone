@@ -38,7 +38,8 @@ export const Route = createFileRoute('/subjects/$subjectId')({
 	component: SubjectDetail,
 })
 
-const DAYS_TH = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+// KMITL teach_day: 1 = อาทิตย์ … 7 = เสาร์.
+const DAYS_TH = ['', 'อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
 const dayTh = (d: number | null) => (d && DAYS_TH[d]) || '-'
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '')
 

@@ -15,15 +15,16 @@ export const Route = createFileRoute('/subjects/')({
 	component: SubjectsBrowse,
 })
 
+// KMITL teach_day: 1 = อาทิตย์ … 7 = เสาร์.
 const DAYS = [
 	{ value: 0, label: 'ทุกวัน' },
-	{ value: 1, label: 'จันทร์' },
-	{ value: 2, label: 'อังคาร' },
-	{ value: 3, label: 'พุธ' },
-	{ value: 4, label: 'พฤหัสบดี' },
-	{ value: 5, label: 'ศุกร์' },
-	{ value: 6, label: 'เสาร์' },
-	{ value: 7, label: 'อาทิตย์' },
+	{ value: 1, label: 'อาทิตย์' },
+	{ value: 2, label: 'จันทร์' },
+	{ value: 3, label: 'อังคาร' },
+	{ value: 4, label: 'พุธ' },
+	{ value: 5, label: 'พฤหัสบดี' },
+	{ value: 6, label: 'ศุกร์' },
+	{ value: 7, label: 'เสาร์' },
 ]
 
 const RATING_FILTERS = [
