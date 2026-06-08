@@ -45,9 +45,20 @@ export const listSubjects = createServerFn({ method: 'GET' })
 						),
 					)})`
 			: undefined
-		const where = and(qCond, openCond, dayCond, ratingCond, groupCond)
+		// Offered by a faculty / department (via the teaching program's department).
+		const facCond = data.facultyId
+			? sql`EXISTS (SELECT 1 FROM ${schema.subjectClass} sc JOIN ${schema.program} p ON p.id = sc.program_id JOIN ${schema.department} d ON d.id = p.department_id WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId} AND d.faculty_id = ${data.facultyId})`
+			: undefined
+		const deptCond = data.departmentId
+			? sql`EXISTS (SELECT 1 FROM ${schema.subjectClass} sc JOIN ${schema.program} p ON p.id = sc.program_id WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId} AND p.department_id = ${data.departmentId})`
+			: undefined
+		const where = and(qCond, openCond, dayCond, ratingCond, groupCond, facCond, deptCond)
 
 		const openSections = sql<number>`(SELECT count(*)::int FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId})`
+		// A representative condition (เงื่อนไข) for the offered subject, if any.
+		const ruleTh = sql<
+			string | null
+		>`(SELECT sc.rule_th FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId} AND sc.rule_th IS NOT NULL AND sc.rule_th <> '' LIMIT 1)`
 
 		const [rows, totalRow] = await Promise.all([
 			db
@@ -59,6 +70,7 @@ export const listSubjects = createServerFn({ method: 'GET' })
 					rating: avg(schema.subjectReview.rating),
 					reviewCount: count(schema.subjectReview.id),
 					openSections: openSections.as('open_sections'),
+					ruleTh: ruleTh.as('rule_th'),
 				})
 				.from(schema.subject)
 				.leftJoin(schema.subjectReview, eq(schema.subjectReview.subjectId, schema.subject.id))
@@ -167,6 +179,55 @@ export const listCurriculumGroupOptions = createServerFn({ method: 'GET' })
 		})
 		// Drop the single curriculum-root wrapper; return its top categories.
 		return (childrenByParent.get(root.id) ?? []).map(build)
+	})
+
+export type SubjectSchedule = {
+	subjectId: string | null
+	section: string | null
+	day: number | null
+	timeStart: string | null
+	timeEnd: string | null
+	examMidterm: string | null
+	examFinal: string | null
+	ruleTh: string | null
+}
+
+/** Representative section schedule (this term) for each subject — for clash
+ *  detection. One section per subject (first by section). */
+export const getSubjectSchedules = createServerFn({ method: 'GET' })
+	.inputValidator((subjectIds: string[]) => subjectIds)
+	.handler(async ({ data: subjectIds }): Promise<SubjectSchedule[]> => {
+		if (!subjectIds.length) return []
+		const [cur] = await db
+			.select({ id: schema.teachtable.id })
+			.from(schema.teachtable)
+			.orderBy(desc(schema.teachtable.year), desc(schema.teachtable.term))
+			.limit(1)
+		const ttId = cur?.id ?? -1
+
+		const rows = await db
+			.select({
+				subjectId: schema.subjectClass.subjectId,
+				section: schema.subjectClass.section,
+				day: schema.subjectClass.day,
+				timeStart: schema.subjectClass.timeStart,
+				timeEnd: schema.subjectClass.timeEnd,
+				examMidterm: schema.subjectClass.examMidterm,
+				examFinal: schema.subjectClass.examFinal,
+				ruleTh: schema.subjectClass.ruleTh,
+			})
+			.from(schema.subjectClass)
+			.where(
+				and(
+					inArray(schema.subjectClass.subjectId, subjectIds),
+					eq(schema.subjectClass.teachtableId, ttId),
+				),
+			)
+			.orderBy(schema.subjectClass.subjectId, schema.subjectClass.section)
+
+		const bySubj = new Map<string, SubjectSchedule>()
+		for (const r of rows) if (r.subjectId && !bySubj.has(r.subjectId)) bySubj.set(r.subjectId, r)
+		return [...bySubj.values()]
 	})
 
 export const listTeachtables = createServerFn({ method: 'GET' }).handler(async () => {

@@ -9,12 +9,16 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import type { Detail } from '~/components/my-subjects-types'
 import {
+	departmentsQuery,
+	facultiesQuery,
 	myCurriculumTreeQuery,
 	myTranscriptQuery,
 	registrationPlanQuery,
+	subjectSchedulesQuery,
 	subjectsQuery,
 } from '~/queries'
 import type { CurriculumTree } from '~/server/progress'
+import type { SubjectSchedule } from '~/server/subjects'
 
 export const Route = createFileRoute('/my-subjects/progress')({
 	component: ProgressTab,
@@ -39,6 +43,36 @@ function ProgressTab() {
 type Planned = { subjectId: string; credit: number }
 
 type GroupSubjectInfo = { id: string; name: string; credit: number }
+
+type Clash = { a: SubjectSchedule; b: SubjectSchedule; type: 'class' | 'exam' }
+
+const classOverlap = (a: SubjectSchedule, b: SubjectSchedule) =>
+	a.day != null &&
+	a.day === b.day &&
+	!!a.timeStart &&
+	!!a.timeEnd &&
+	!!b.timeStart &&
+	!!b.timeEnd &&
+	a.timeStart < b.timeEnd &&
+	b.timeStart < a.timeEnd
+
+const examOverlap = (a: SubjectSchedule, b: SubjectSchedule) =>
+	(!!a.examFinal && a.examFinal === b.examFinal) ||
+	(!!a.examMidterm && a.examMidterm === b.examMidterm)
+
+/** Pairwise class-time / exam clashes among representative section schedules. */
+function detectClashes(scheds: SubjectSchedule[]): Clash[] {
+	const out: Clash[] = []
+	for (let i = 0; i < scheds.length; i++) {
+		for (let j = i + 1; j < scheds.length; j++) {
+			const a = scheds[i]!
+			const b = scheds[j]!
+			if (classOverlap(a, b)) out.push({ a, b, type: 'class' })
+			else if (examOverlap(a, b)) out.push({ a, b, type: 'exam' })
+		}
+	}
+	return out
+}
 
 function ProgressView({
 	details,
@@ -185,6 +219,19 @@ function ProgressView({
 		return m
 	}, [projected])
 
+	// Class-time / exam clashes among the subjects to register this term
+	// (registrar plan + free-elective picks).
+	const toRegister = useMemo(
+		() => [...new Set([...recommended, ...freePicks.keys()])].filter((id) => !takenSet.has(id)),
+		[recommended, freePicks, takenSet],
+	)
+	const { data: schedules } = useQuery({
+		...subjectSchedulesQuery(toRegister),
+		enabled: toRegister.length > 1,
+	})
+	const clashes = useMemo(() => detectClashes(schedules ?? []), [schedules])
+	const nameOf = (id: string) => courseInfo.get(id)?.name || freePicks.get(id)?.name || id
+
 	if (!tree) {
 		return (
 			<Card>
@@ -259,6 +306,19 @@ function ProgressView({
 						</div>
 						{simulatedCredit > 27 && (
 							<p className="text-amber-700 text-xs">⚠ ลงเกินเพดาน ~27 นก./เทอม — ควรแบ่งหลายเทอม</p>
+						)}
+						{clashes.length > 0 && (
+							<div className="rounded-lg bg-red-50 px-3 py-2 text-red-700 text-xs">
+								<p className="font-semibold">⚠ ตารางอาจชนกัน ({clashes.length})</p>
+								<ul className="mt-1 space-y-0.5">
+									{clashes.map((c) => (
+										<li key={`${c.a.subjectId}-${c.b.subjectId}-${c.type}`}>
+											{c.type === 'exam' ? 'สอบทับ' : 'เวลาเรียนทับ'}: {nameOf(c.a.subjectId ?? '')} ↔{' '}
+											{nameOf(c.b.subjectId ?? '')}
+										</li>
+									))}
+								</ul>
+							</div>
 						)}
 					</div>
 
@@ -362,8 +422,22 @@ function FreeElectivePicker({
 	const [q, setQ] = useState('')
 	const [applied, setApplied] = useState('')
 	const [page, setPage] = useState(1)
+	const [facultyId, setFacultyId] = useState(0)
+	const [departmentId, setDepartmentId] = useState(0)
+	const { data: faculties } = useQuery(facultiesQuery())
+	const { data: departments } = useQuery({
+		...departmentsQuery(facultyId || undefined),
+		enabled: facultyId > 0,
+	})
 	const { data } = useQuery(
-		subjectsQuery({ q: applied || undefined, openOnly: true, page, pageSize: 8 }),
+		subjectsQuery({
+			q: applied || undefined,
+			openOnly: true,
+			facultyId: facultyId || undefined,
+			departmentId: departmentId || undefined,
+			page,
+			pageSize: 8,
+		}),
 	)
 
 	return (
@@ -393,6 +467,41 @@ function FreeElectivePicker({
 				</ul>
 			)}
 			<p className="text-slate-500 text-xs">เลือกจากวิชาที่เปิดสอนเทอมนี้:</p>
+			<div className="flex flex-wrap gap-2">
+				<select
+					value={facultyId}
+					onChange={(e) => {
+						setFacultyId(Number(e.target.value))
+						setDepartmentId(0)
+						setPage(1)
+					}}
+					className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+				>
+					<option value={0}>ทุกคณะ</option>
+					{(faculties ?? []).map((f) => (
+						<option key={f.id} value={f.id}>
+							{f.nameTh}
+						</option>
+					))}
+				</select>
+				{facultyId > 0 && (
+					<select
+						value={departmentId}
+						onChange={(e) => {
+							setDepartmentId(Number(e.target.value))
+							setPage(1)
+						}}
+						className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+					>
+						<option value={0}>ทุกภาควิชา</option>
+						{(departments ?? []).map((d) => (
+							<option key={d.id} value={d.id}>
+								{d.nameTh}
+							</option>
+						))}
+					</select>
+				)}
+			</div>
 			<form
 				className="flex gap-2"
 				onSubmit={(e) => {
@@ -424,14 +533,21 @@ function FreeElectivePicker({
 								const picked = picks.has(s.id)
 								const taken = takenSet.has(s.id)
 								return (
-									<li key={s.id} className="flex items-center gap-2 text-xs">
-										<Link
-											to="/subjects/$subjectId"
-											params={{ subjectId: s.id }}
-											className="flex-1 truncate text-slate-600 hover:text-brand-700"
-										>
-											{s.id} {s.nameTh ?? s.nameEn}
-										</Link>
+									<li key={s.id} className="flex items-start gap-2 text-xs">
+										<div className="min-w-0 flex-1">
+											<Link
+												to="/subjects/$subjectId"
+												params={{ subjectId: s.id }}
+												className="block truncate text-slate-600 hover:text-brand-700"
+											>
+												{s.id} {s.nameTh ?? s.nameEn}
+											</Link>
+											{s.ruleTh && (
+												<p className="truncate text-[11px] text-amber-600" title={s.ruleTh}>
+													⚠ {s.ruleTh}
+												</p>
+											)}
+										</div>
 										<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
 										{taken ? (
 											<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>

@@ -92,6 +92,10 @@ type Section = {
 	limit: string | number | null
 	count: number | null
 	closed: string | null
+	midterm_start_date_time: string | null
+	final_start_date_time: string | null
+	rules_th: string | null
+	remark: string | null
 }
 type Block = { department_id: string; curriculum2_id: string; teachtable: { data: Section[] }[] }
 
@@ -243,6 +247,10 @@ async function main() {
 						capacity: num(it.limit),
 						enrolled: num(it.count),
 						closed: it.closed === '1',
+						examMidterm: it.midterm_start_date_time ?? null,
+						examFinal: it.final_start_date_time ?? null,
+						ruleTh: stripHtml(it.rules_th),
+						remark: stripHtml(it.remark),
 					})
 				}
 			}
@@ -275,6 +283,10 @@ async function main() {
 						capacity: sql`excluded.capacity`,
 						enrolled: sql`excluded.enrolled`,
 						closed: sql`excluded.closed`,
+						examMidterm: sql`excluded.exam_midterm`,
+						examFinal: sql`excluded.exam_final`,
+						ruleTh: sql`excluded.rule_th`,
+						remark: sql`excluded.remark`,
 					},
 				})
 			secN += uniq.length

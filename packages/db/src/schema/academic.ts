@@ -137,6 +137,11 @@ export const subjectClass = pgTable('subject_class', {
 	capacity: integer('capacity'),
 	enrolled: integer('enrolled'),
 	closed: boolean('closed').default(false),
+	// exam date-times + registration conditions (เงื่อนไข) from the teach-table
+	examMidterm: text('exam_midterm'),
+	examFinal: text('exam_final'),
+	ruleTh: text('rule_th'),
+	remark: text('remark'),
 })
 
 // ---- Reviews ----

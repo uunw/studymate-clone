@@ -13,6 +13,7 @@ import {
 } from '~/server/reviews'
 import {
 	getSubject,
+	getSubjectSchedules,
 	listCurriculumGroupOptions,
 	listSectionsForSubject,
 	listSubjects,
@@ -72,6 +73,12 @@ export const curriculumReviewsQuery = () =>
 
 export const teachtablesQuery = () =>
 	queryOptions({ queryKey: ['teachtables'], queryFn: () => listTeachtables() })
+
+export const subjectSchedulesQuery = (subjectIds: string[]) =>
+	queryOptions({
+		queryKey: ['subject-schedules', [...subjectIds].sort()],
+		queryFn: () => getSubjectSchedules({ data: subjectIds }),
+	})
 
 export const curriculumGroupOptionsQuery = (curriculumId: number) =>
 	queryOptions({
