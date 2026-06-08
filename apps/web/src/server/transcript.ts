@@ -1,4 +1,4 @@
-import { and, db, desc, eq, schema } from '@repo/db'
+import { and, asc, db, desc, eq, schema } from '@repo/db'
 import { createServerFn } from '@tanstack/react-start'
 
 /** The signed-in user's latest transcript with parsed course rows. */
@@ -20,6 +20,7 @@ export const getMyTranscript = createServerFn({ method: 'GET' }).handler(async (
 			subjectId: schema.transcriptDetail.subjectId,
 			grade: schema.transcriptDetail.grade,
 			nameTh: schema.subject.nameTh,
+			nameEn: schema.subject.nameEn,
 			credit: schema.subject.credit,
 			year: schema.teachtable.year,
 			term: schema.teachtable.term,
@@ -28,6 +29,11 @@ export const getMyTranscript = createServerFn({ method: 'GET' }).handler(async (
 		.leftJoin(schema.subject, eq(schema.subject.id, schema.transcriptDetail.subjectId))
 		.leftJoin(schema.teachtable, eq(schema.teachtable.id, schema.transcriptDetail.teachtableId))
 		.where(eq(schema.transcriptDetail.transcriptId, transcript.id))
+		.orderBy(
+			asc(schema.teachtable.year),
+			asc(schema.teachtable.term),
+			schema.transcriptDetail.subjectId,
+		)
 
 	return { transcript, details }
 })

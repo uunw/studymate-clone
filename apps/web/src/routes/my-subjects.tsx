@@ -1,4 +1,4 @@
-import { calculateGpa, formatTerm, formatThaiDate, isPassing } from '@repo/core/utils'
+import { calculateGpa, formatThaiDate, isPassing } from '@repo/core/utils'
 import { Alert, Badge, Button, Card, CardBody, CardHeader, EmptyState } from '@repo/ui'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect } from '@tanstack/react-router'
@@ -110,9 +110,27 @@ type Detail = {
 	subjectId: string | null
 	grade: string | null
 	nameTh: string | null
+	nameEn: string | null
 	credit: number | null
 	year: number | null
 	term: number | null
+}
+
+type TermGroup = { key: string; year: number | null; term: number | null; items: Detail[] }
+
+function groupByTerm(details: Detail[]): TermGroup[] {
+	const groups = new Map<string, TermGroup>()
+	for (const d of details) {
+		const key = d.year != null && d.term != null ? `${d.year}-${d.term}` : 'transfer'
+		const g = groups.get(key)
+		if (g) g.items.push(d)
+		else groups.set(key, { key, year: d.year, term: d.term, items: [d] })
+	}
+	// transfer first, then by year/term ascending
+	return [...groups.values()].sort((a, b) => {
+		const rank = (g: TermGroup) => (g.year == null ? -1 : g.year * 10 + (g.term ?? 0))
+		return rank(a) - rank(b)
+	})
 }
 
 function TranscriptView({
@@ -127,7 +145,12 @@ function TranscriptView({
 	deleting: boolean
 }) {
 	const gpa = calculateGpa(details.map((d) => ({ grade: d.grade ?? '', credit: d.credit ?? 0 })))
+	const totalCredit = details.reduce(
+		(s, d) => s + (isPassing(d.grade ?? '') ? (d.credit ?? 0) : 0),
+		0,
+	)
 	const uploadedAt = formatThaiDate(new Date(createdAt))
+	const groups = groupByTerm(details)
 
 	return (
 		<div className="space-y-6">
@@ -138,58 +161,57 @@ function TranscriptView({
 						<p className="font-bold text-3xl text-brand-700">{gpa.toFixed(2)}</p>
 					</div>
 					<div className="text-right text-slate-400 text-xs">
-						<p>{details.length} รายวิชา</p>
+						<p>
+							{details.length} รายวิชา · {totalCredit} หน่วยกิตสะสม
+						</p>
 						<p>นำเข้าเมื่อ {uploadedAt}</p>
+						<Button
+							variant="danger"
+							size="sm"
+							loading={deleting}
+							onClick={onDelete}
+							className="mt-2"
+						>
+							ลบ transcript
+						</Button>
 					</div>
 				</CardBody>
 			</Card>
 
-			<Card>
-				<CardHeader className="flex items-center justify-between">
-					<h2 className="font-semibold text-slate-900">รายวิชาทั้งหมด</h2>
-					<Button variant="danger" size="sm" loading={deleting} onClick={onDelete}>
-						ลบ transcript
-					</Button>
-				</CardHeader>
-				<CardBody className="p-0">
-					{details.length === 0 ? (
-						<div className="p-5">
-							<EmptyState title="ไม่มีรายวิชาที่ตรงกับฐานข้อมูล" />
-						</div>
-					) : (
-						<div className="overflow-x-auto">
-							<table className="w-full text-left text-sm">
-								<thead>
-									<tr className="border-slate-100 border-b text-slate-500">
-										<th className="px-5 py-2 font-medium">รหัสวิชา</th>
-										<th className="px-5 py-2 font-medium">ชื่อวิชา</th>
-										<th className="px-5 py-2 font-medium">ภาคเรียน</th>
-										<th className="px-5 py-2 font-medium">เกรด</th>
-									</tr>
-								</thead>
-								<tbody>
-									{details.map((d) => (
-										<tr key={d.id} className="border-slate-50 border-b last:border-0">
-											<td className="px-5 py-2 font-medium text-slate-700">{d.subjectId ?? '—'}</td>
-											<td className="px-5 py-2 text-slate-700">{d.nameTh ?? '—'}</td>
-											<td className="px-5 py-2 text-slate-500">
-												{d.year != null && d.term != null ? formatTerm(d.year, d.term) : '—'}
-											</td>
-											<td className="px-5 py-2">
-												{d.grade ? (
-													<Badge tone={isPassing(d.grade) ? 'green' : 'red'}>{d.grade}</Badge>
-												) : (
-													<span className="text-slate-400">—</span>
-												)}
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</CardBody>
-			</Card>
+			{groups.length === 0 ? (
+				<EmptyState title="ไม่พบรายวิชาใน transcript" />
+			) : (
+				groups.map((g) => (
+					<Card key={g.key}>
+						<CardHeader>
+							<h2 className="font-semibold text-slate-900">
+								{g.year == null ? 'หน่วยกิตเทียบโอน' : `ปีการศึกษา ${g.year} · ภาคเรียนที่ ${g.term}`}
+							</h2>
+							{g.year == null && <p className="text-slate-400 text-xs">Transfer Credit</p>}
+						</CardHeader>
+						<CardBody className="divide-y divide-slate-50 p-0">
+							{g.items.map((d) => (
+								<div key={d.id} className="flex items-center gap-3 px-5 py-3">
+									<div className="min-w-0 flex-1">
+										<p className="truncate font-medium text-slate-800 text-sm">
+											{d.subjectId} {d.nameTh ?? d.nameEn ?? ''}
+										</p>
+										{d.nameTh && d.nameEn && (
+											<p className="truncate text-slate-400 text-xs">{d.nameEn}</p>
+										)}
+									</div>
+									<span className="shrink-0 text-slate-500 text-sm">{d.credit ?? '-'} นก.</span>
+									{d.grade && (
+										<Badge tone={isPassing(d.grade) ? 'green' : d.grade === 'T' ? 'slate' : 'red'}>
+											{d.grade}
+										</Badge>
+									)}
+								</div>
+							))}
+						</CardBody>
+					</Card>
+				))
+			)}
 		</div>
 	)
 }
