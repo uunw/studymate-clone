@@ -42,6 +42,8 @@ export const subjectFilterSchema = z.object({
 	year: z.coerce.number().int().optional(),
 	term: z.coerce.number().int().min(1).max(3).optional(),
 	isGened: z.coerce.boolean().optional(),
+	// "offered this term" — accept bool or the 'true'/'false' URL string
+	openOnly: z.union([z.boolean(), z.string()]).optional(),
 	page: z.coerce.number().int().min(1).default(1),
 	pageSize: z.coerce.number().int().min(1).max(100).default(10),
 })

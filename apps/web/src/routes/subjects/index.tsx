@@ -19,10 +19,15 @@ function SubjectsBrowse() {
 	const navigate = Route.useNavigate()
 	const { data } = useSuspenseQuery(subjectsQuery(search))
 	const [q, setQ] = useState(search.q ?? '')
+	const openOnly = search.openOnly === true || search.openOnly === 'true'
 
 	const onSearch = (e: React.FormEvent) => {
 		e.preventDefault()
 		navigate({ search: (p) => ({ ...p, q: q.trim() || undefined, page: 1 }) })
+	}
+
+	const toggleOpen = () => {
+		navigate({ search: (p) => ({ ...p, openOnly: openOnly ? undefined : true, page: 1 }) })
 	}
 
 	const goToPage = (page: number) => {
@@ -46,6 +51,13 @@ function SubjectsBrowse() {
 				<Button type="submit">ค้นหา</Button>
 			</form>
 
+			<div className="flex items-center gap-3">
+				<Button variant={openOnly ? 'primary' : 'secondary'} size="sm" onClick={toggleOpen}>
+					{openOnly ? '✓ ' : ''}เปิดสอนเทอมนี้
+				</Button>
+				<span className="text-slate-500 text-sm">พบ {data.total} วิชา</span>
+			</div>
+
 			{data.items.length === 0 ? (
 				<EmptyState title="ไม่พบรายวิชา" description="ลองเปลี่ยนคำค้นหาแล้วลองใหม่อีกครั้ง" />
 			) : (
@@ -63,7 +75,12 @@ function SubjectsBrowse() {
 										<h2 className="font-semibold text-slate-900 leading-snug">{subject.nameTh}</h2>
 										<Badge tone="brand">{subject.credit} หน่วยกิต</Badge>
 									</div>
-									<p className="text-slate-500 text-sm">{subject.id}</p>
+									<div className="flex items-center gap-2">
+										<p className="text-slate-500 text-sm">{subject.id}</p>
+										{subject.openSections > 0 && (
+											<Badge tone="green">เปิดสอน {subject.openSections} sec</Badge>
+										)}
+									</div>
 									<div className="flex items-center gap-2">
 										<RatingStars value={subject.rating} />
 										<span className="text-slate-500 text-sm">

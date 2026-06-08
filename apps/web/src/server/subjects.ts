@@ -1,18 +1,34 @@
 import { subjectFilterSchema } from '@repo/core/schemas'
 import { pageBounds } from '@repo/core/utils'
-import { asc, avg, count, db, desc, eq, schema, sql } from '@repo/db'
+import { and, asc, avg, count, db, desc, eq, schema, sql } from '@repo/db'
 import { createServerFn } from '@tanstack/react-start'
 
-/** Paginated subject list with average rating + review count. */
+/** Paginated subject list with average rating, review count, and sections-offered-this-term. */
 export const listSubjects = createServerFn({ method: 'GET' })
 	.inputValidator(subjectFilterSchema)
 	.handler(async ({ data }) => {
 		const { q, page, pageSize } = data
+		const openOnly = data.openOnly === true || data.openOnly === 'true'
 		const like = `%${q ?? ''}%`
-		const where = q
+		const { limit, offset } = pageBounds(page, pageSize)
+
+		// Current term = the latest teachtable.
+		const [cur] = await db
+			.select({ id: schema.teachtable.id })
+			.from(schema.teachtable)
+			.orderBy(desc(schema.teachtable.year), desc(schema.teachtable.term))
+			.limit(1)
+		const ttId = cur?.id ?? -1
+
+		const qCond = q
 			? sql`(${schema.subject.nameTh} ILIKE ${like} OR ${schema.subject.nameEn} ILIKE ${like} OR ${schema.subject.id} ILIKE ${like})`
 			: undefined
-		const { limit, offset } = pageBounds(page, pageSize)
+		const openCond = openOnly
+			? sql`EXISTS (SELECT 1 FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId})`
+			: undefined
+		const where = and(qCond, openCond)
+
+		const openSections = sql<number>`(SELECT count(*)::int FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId})`
 
 		const [rows, totalRow] = await Promise.all([
 			db
@@ -23,6 +39,7 @@ export const listSubjects = createServerFn({ method: 'GET' })
 					credit: schema.subject.credit,
 					rating: avg(schema.subjectReview.rating),
 					reviewCount: count(schema.subjectReview.id),
+					openSections: openSections.as('open_sections'),
 				})
 				.from(schema.subject)
 				.leftJoin(schema.subjectReview, eq(schema.subjectReview.subjectId, schema.subject.id))
@@ -39,6 +56,7 @@ export const listSubjects = createServerFn({ method: 'GET' })
 			items: rows.map((r) => ({
 				...r,
 				rating: r.rating ? Number(r.rating) : 0,
+				openSections: Number(r.openSections ?? 0),
 			})),
 			page,
 			pageSize,
