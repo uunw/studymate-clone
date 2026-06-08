@@ -1,4 +1,4 @@
-import { hasCondition, isSectionOpenToStudent } from '@repo/core/eligibility'
+import { hasCondition, isSectionOpenToStudent, majorToken } from '@repo/core/eligibility'
 import { subjectFilterSchema } from '@repo/core/schemas'
 import { pageBounds } from '@repo/core/utils'
 import { and, asc, avg, count, db, desc, eq, inArray, schema, sql } from '@repo/db'
@@ -214,6 +214,29 @@ export const listOfferedElectives = createServerFn({ method: 'GET' })
 		const user = await readUser()
 		const studentId = Number(user?.username ?? Number.NaN)
 
+		// Student's major token + faculty, for matching "เฉพาะสาขา/คณะ" conditions.
+		let ctx: { major?: string; faculty?: string } = {}
+		if (user?.curriculumId) {
+			const [info] = await db
+				.select({
+					progName: schema.program.nameTh,
+					deptName: schema.department.nameTh,
+					facName: schema.faculty.nameTh,
+				})
+				.from(schema.curriculum)
+				.leftJoin(schema.program, eq(schema.program.id, schema.curriculum.programId))
+				.leftJoin(schema.department, eq(schema.department.id, schema.program.departmentId))
+				.leftJoin(schema.faculty, eq(schema.faculty.id, schema.department.facultyId))
+				.where(eq(schema.curriculum.id, user.curriculumId))
+				.limit(1)
+			if (info) {
+				ctx = {
+					major: majorToken(info.progName) || majorToken(info.deptName) || undefined,
+					faculty: info.facName ?? undefined,
+				}
+			}
+		}
+
 		const [cur] = await db
 			.select({ id: schema.teachtable.id })
 			.from(schema.teachtable)
@@ -251,30 +274,37 @@ export const listOfferedElectives = createServerFn({ method: 'GET' })
 			.innerJoin(schema.subject, eq(schema.subject.id, schema.subjectClass.subjectId))
 			.where(and(...conds))
 
-		// Group sections by subject; a subject is eligible if ANY of its sections
-		// admits the student, restricted if any section carries a condition.
-		const bySubj = new Map<string, OfferedElective & { open: boolean }>()
+		// Group sections by subject. A subject is eligible if ANY section admits the
+		// student; its shown เงื่อนไข is taken from a section the student can use
+		// (prefer a clean, condition-free one — that's the section they'd register).
+		const bySubj = new Map<string, OfferedElective & { open: boolean; chosen: boolean }>()
 		for (const r of rows) {
-			const cur = bySubj.get(r.id)
-			const open = isSectionOpenToStudent(r.ruleTh, studentId)
-			if (!cur) {
-				bySubj.set(r.id, {
+			const open = isSectionOpenToStudent(r.ruleTh, studentId, ctx)
+			let e = bySubj.get(r.id)
+			if (!e) {
+				e = {
 					id: r.id,
 					nameTh: r.nameTh,
 					nameEn: r.nameEn,
 					credit: r.credit,
-					ruleTh: hasCondition(r.ruleTh) ? r.ruleTh : null,
-					restricted: hasCondition(r.ruleTh),
-					open,
-				})
-			} else {
-				cur.open = cur.open || open
-				if (hasCondition(r.ruleTh)) {
-					cur.restricted = true
-					if (!cur.ruleTh) cur.ruleTh = r.ruleTh
+					ruleTh: null,
+					restricted: false,
+					open: false,
+					chosen: false,
+				}
+				bySubj.set(r.id, e)
+			}
+			if (open) {
+				e.open = true
+				if (!hasCondition(r.ruleTh)) {
+					e.ruleTh = null
+					e.chosen = true
+				} else if (!e.chosen) {
+					e.ruleTh = r.ruleTh
 				}
 			}
 		}
+		for (const e of bySubj.values()) e.restricted = !!e.ruleTh
 
 		const hideRestricted = !data.includeRestricted && Number.isFinite(studentId)
 		const all = [...bySubj.values()]
@@ -285,7 +315,7 @@ export const listOfferedElectives = createServerFn({ method: 'GET' })
 		const start = (data.page - 1) * data.pageSize
 		const items: OfferedElective[] = all
 			.slice(start, start + data.pageSize)
-			.map(({ open: _open, ...s }) => s)
+			.map(({ open: _open, chosen: _chosen, ...s }) => s)
 		return {
 			items,
 			page: data.page,
