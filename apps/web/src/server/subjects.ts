@@ -1,6 +1,6 @@
 import { subjectFilterSchema } from '@repo/core/schemas'
 import { pageBounds } from '@repo/core/utils'
-import { and, asc, avg, count, db, desc, eq, schema, sql } from '@repo/db'
+import { and, asc, avg, count, db, desc, eq, inArray, schema, sql } from '@repo/db'
 import { createServerFn } from '@tanstack/react-start'
 
 /** Paginated subject list with average rating, review count, and sections-offered-this-term. */
@@ -34,7 +34,18 @@ export const listSubjects = createServerFn({ method: 'GET' })
 		const ratingCond = data.minRating
 			? sql`(SELECT COALESCE(AVG(sr.rating), 0) FROM ${schema.subjectReview} sr WHERE sr.subject_id = ${schema.subject.id}) >= ${data.minRating}`
 			: undefined
-		const where = and(qCond, openCond, dayCond, ratingCond)
+		const groupCond = data.groupIds?.length
+			? sql`EXISTS (${db
+					.select({ one: sql`1` })
+					.from(schema.curriculumGroupSubject)
+					.where(
+						and(
+							eq(schema.curriculumGroupSubject.subjectId, schema.subject.id),
+							inArray(schema.curriculumGroupSubject.groupId, data.groupIds),
+						),
+					)})`
+			: undefined
+		const where = and(qCond, openCond, dayCond, ratingCond, groupCond)
 
 		const openSections = sql<number>`(SELECT count(*)::int FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId})`
 
@@ -97,6 +108,65 @@ export const getSubject = createServerFn({ method: 'GET' })
 			rating: agg?.rating ? Number(agg.rating) : 0,
 			reviewCount: agg?.reviewCount ?? 0,
 		}
+	})
+
+export type GroupOption = {
+	id: number
+	name: string | null
+	type: string | null
+	color: string | null
+	children: GroupOption[]
+}
+
+/** A curriculum's group tree (top categories + descendants) for the browse-page
+ *  checkbox filter. Public; no subjects, just labels for selecting group ids. */
+export const listCurriculumGroupOptions = createServerFn({ method: 'GET' })
+	.inputValidator((curriculumId: number) => curriculumId)
+	.handler(async ({ data: curriculumId }): Promise<GroupOption[]> => {
+		const [cur] = await db
+			.select({ groupId: schema.curriculum.groupId })
+			.from(schema.curriculum)
+			.where(eq(schema.curriculum.id, curriculumId))
+			.limit(1)
+		if (!cur?.groupId) return []
+
+		const rows: (typeof schema.curriculumGroup.$inferSelect)[] = []
+		const [root] = await db
+			.select()
+			.from(schema.curriculumGroup)
+			.where(eq(schema.curriculumGroup.id, cur.groupId))
+			.limit(1)
+		if (!root) return []
+		rows.push(root)
+		let frontier = [root.id]
+		while (frontier.length) {
+			const children = await db
+				.select()
+				.from(schema.curriculumGroup)
+				.where(inArray(schema.curriculumGroup.parentId, frontier))
+			if (!children.length) break
+			rows.push(...children)
+			frontier = children.map((c) => c.id)
+		}
+
+		const childrenByParent = new Map<number, typeof rows>()
+		for (const r of rows) {
+			if (r.parentId == null) continue
+			const list = childrenByParent.get(r.parentId) ?? []
+			list.push(r)
+			childrenByParent.set(r.parentId, list)
+		}
+		for (const list of childrenByParent.values()) list.sort((a, b) => a.id - b.id)
+
+		const build = (r: (typeof rows)[number]): GroupOption => ({
+			id: r.id,
+			name: r.name,
+			type: r.type,
+			color: r.color,
+			children: (childrenByParent.get(r.id) ?? []).map(build),
+		})
+		// Drop the single curriculum-root wrapper; return its top categories.
+		return (childrenByParent.get(root.id) ?? []).map(build)
 	})
 
 export const listTeachtables = createServerFn({ method: 'GET' }).handler(async () => {

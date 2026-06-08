@@ -12,6 +12,7 @@ import {
 } from '~/server/reviews'
 import {
 	getSubject,
+	listCurriculumGroupOptions,
 	listSectionsForSubject,
 	listSubjects,
 	listTeachtables,
@@ -70,6 +71,12 @@ export const curriculumReviewsQuery = () =>
 
 export const teachtablesQuery = () =>
 	queryOptions({ queryKey: ['teachtables'], queryFn: () => listTeachtables() })
+
+export const curriculumGroupOptionsQuery = (curriculumId: number) =>
+	queryOptions({
+		queryKey: ['curriculum-group-options', curriculumId],
+		queryFn: () => listCurriculumGroupOptions({ data: curriculumId }),
+	})
 
 export const facultiesQuery = () =>
 	queryOptions({ queryKey: ['faculties'], queryFn: () => listFaculties() })

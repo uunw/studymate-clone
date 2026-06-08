@@ -1,9 +1,10 @@
 import { subjectFilterSchema } from '@repo/core/schemas'
 import { Badge, Button, Card, CardBody, EmptyState, Input, RatingStars } from '@repo/ui'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { subjectsQuery } from '~/queries'
+import { curriculaQuery, curriculumGroupOptionsQuery, subjectsQuery } from '~/queries'
+import type { GroupOption } from '~/server/subjects'
 
 export const Route = createFileRoute('/subjects/')({
 	validateSearch: subjectFilterSchema,
@@ -58,6 +59,21 @@ function SubjectsBrowse() {
 	const setMinRating = (minRating: number) => {
 		navigate({ search: (p) => ({ ...p, minRating: minRating || undefined, page: 1 }) })
 	}
+	const setCurriculum = (curriculumId: number) => {
+		navigate({
+			search: (p) => ({
+				...p,
+				curriculumId: curriculumId || undefined,
+				groupIds: undefined,
+				page: 1,
+			}),
+		})
+	}
+	const setGroupIds = (groupIds: number[]) => {
+		navigate({
+			search: (p) => ({ ...p, groupIds: groupIds.length ? groupIds : undefined, page: 1 }),
+		})
+	}
 
 	return (
 		<div className="space-y-6">
@@ -104,6 +120,13 @@ function SubjectsBrowse() {
 				</select>
 				<span className="text-slate-500 text-sm">พบ {data.total} วิชา</span>
 			</div>
+
+			<GroupFilter
+				curriculumId={search.curriculumId}
+				selected={search.groupIds ?? []}
+				onCurriculum={setCurriculum}
+				onChange={setGroupIds}
+			/>
 
 			{data.items.length === 0 ? (
 				<EmptyState title="ไม่พบรายวิชา" description="ลองเปลี่ยนคำค้นหาแล้วลองใหม่อีกครั้ง" />
@@ -162,6 +185,117 @@ function SubjectsBrowse() {
 					</Button>
 				</div>
 			)}
+		</div>
+	)
+}
+
+/** id + all descendant ids of a group node. */
+function collectIds(node: GroupOption): number[] {
+	return [node.id, ...node.children.flatMap(collectIds)]
+}
+
+/** Curriculum picker + its group checkbox tree. Checking a node toggles the
+ *  node and all its descendants; selected ids filter the subject list. */
+function GroupFilter({
+	curriculumId,
+	selected,
+	onCurriculum,
+	onChange,
+}: {
+	curriculumId?: number
+	selected: number[]
+	onCurriculum: (id: number) => void
+	onChange: (ids: number[]) => void
+}) {
+	const { data: curricula } = useQuery(curriculaQuery())
+	const { data: groups } = useQuery({
+		...curriculumGroupOptionsQuery(curriculumId ?? 0),
+		enabled: !!curriculumId,
+	})
+	const selectedSet = new Set(selected)
+
+	const toggle = (node: GroupOption) => {
+		const ids = collectIds(node)
+		const allOn = ids.every((id) => selectedSet.has(id))
+		const next = new Set(selectedSet)
+		for (const id of ids) {
+			if (allOn) next.delete(id)
+			else next.add(id)
+		}
+		onChange([...next])
+	}
+
+	return (
+		<Card>
+			<CardBody className="space-y-3">
+				<div className="flex flex-wrap items-center gap-3">
+					<span className="font-medium text-slate-700 text-sm">กรองตามหลักสูตร</span>
+					<select
+						value={curriculumId ?? 0}
+						onChange={(e) => onCurriculum(Number(e.target.value))}
+						className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 text-sm shadow-sm"
+					>
+						<option value={0}>— ทุกหลักสูตร —</option>
+						{(curricula ?? []).map((c) => (
+							<option key={c.id} value={c.id}>
+								{c.nameTh} ({c.year})
+							</option>
+						))}
+					</select>
+					{selected.length > 0 && (
+						<Button size="sm" variant="ghost" onClick={() => onChange([])}>
+							ล้างกลุ่ม ({selected.length})
+						</Button>
+					)}
+				</div>
+
+				{curriculumId && groups && groups.length > 0 && (
+					<div className="space-y-1">
+						{groups.map((g) => (
+							<GroupCheckbox
+								key={g.id}
+								node={g}
+								depth={0}
+								selectedSet={selectedSet}
+								onToggle={toggle}
+							/>
+						))}
+					</div>
+				)}
+			</CardBody>
+		</Card>
+	)
+}
+
+function GroupCheckbox({
+	node,
+	depth,
+	selectedSet,
+	onToggle,
+}: {
+	node: GroupOption
+	depth: number
+	selectedSet: Set<number>
+	onToggle: (node: GroupOption) => void
+}) {
+	return (
+		<div style={{ marginLeft: depth * 16 }}>
+			<label className="flex items-center gap-2 py-0.5 text-slate-700 text-sm">
+				<input type="checkbox" checked={selectedSet.has(node.id)} onChange={() => onToggle(node)} />
+				{node.color && (
+					<span className="h-2.5 w-2.5 rounded-full" style={{ background: node.color }} />
+				)}
+				{node.name}
+			</label>
+			{node.children.map((c) => (
+				<GroupCheckbox
+					key={c.id}
+					node={c}
+					depth={depth + 1}
+					selectedSet={selectedSet}
+					onToggle={onToggle}
+				/>
+			))}
 		</div>
 	)
 }

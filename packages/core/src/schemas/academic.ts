@@ -48,6 +48,8 @@ export const subjectFilterSchema = z.object({
 	day: z.coerce.number().int().min(1).max(7).optional(),
 	// minimum average review rating
 	minRating: z.coerce.number().min(0).max(5).optional(),
+	// restrict to subjects in these curriculum groups (checkbox-tree filter)
+	groupIds: z.array(z.coerce.number().int()).optional(),
 	page: z.coerce.number().int().min(1).default(1),
 	pageSize: z.coerce.number().int().min(1).max(100).default(10),
 })
