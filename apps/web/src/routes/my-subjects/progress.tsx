@@ -20,38 +20,68 @@ function ProgressTab() {
 	const { data: tree } = useSuspenseQuery(myCurriculumTreeQuery())
 	// Recommended-this-term subjects (registrar pre-reg plan) — non-blocking.
 	const { data: plan } = useQuery(registrationPlanQuery())
-	const recommended = useMemo(
-		() => new Set((plan?.items ?? []).filter((i) => !i.taken).map((i) => i.subjectId)),
+	const planned = useMemo(
+		() =>
+			(plan?.items ?? [])
+				.filter((i) => !i.taken)
+				.map((i) => ({ subjectId: i.subjectId, credit: i.credit ?? 0 })),
 		[plan],
 	)
 	if (!data) return null
-	return <ProgressView details={data.details} tree={tree} recommended={recommended} />
+	return <ProgressView details={data.details} tree={tree} planned={planned} />
 }
+
+type Planned = { subjectId: string; credit: number }
 
 type GroupSubjectInfo = { id: string; name: string; credit: number }
 
 function ProgressView({
 	details,
 	tree,
-	recommended,
+	planned,
 }: {
 	details: Detail[]
 	tree: CurriculumTree | null
-	recommended: Set<string>
+	planned: Planned[]
 }) {
 	const [includeX, setIncludeX] = useState(false)
+	const recommended = useMemo(() => new Set(planned.map((p) => p.subjectId)), [planned])
 
-	const progress: ProgressResult | null = useMemo(() => {
-		if (!tree) return null
-		const completed = details
-			.filter((d) => d.subjectId && d.grade)
-			.map((d) => ({
-				subjectId: d.subjectId as string,
-				credit: d.credit ?? 0,
-				grade: d.grade as string,
-			}))
-		return allocateProgress(tree.root, completed, { includeX })
-	}, [tree, details, includeX])
+	const completed = useMemo(
+		() =>
+			details
+				.filter((d) => d.subjectId && d.grade)
+				.map((d) => ({
+					subjectId: d.subjectId as string,
+					credit: d.credit ?? 0,
+					grade: d.grade as string,
+				})),
+		[details],
+	)
+
+	const progress: ProgressResult | null = useMemo(
+		() => (tree ? allocateProgress(tree.root, completed, { includeX }) : null),
+		[tree, completed, includeX],
+	)
+
+	// Projection: re-run allocation as if the planned (recommended) subjects were
+	// passed. The delta vs `progress` is what registering this term's plan adds.
+	const projected: ProgressResult | null = useMemo(() => {
+		if (!tree || planned.length === 0) return null
+		const withPlan = [...completed, ...planned.map((p) => ({ ...p, grade: 'S' }))]
+		return allocateProgress(tree.root, withPlan, { includeX })
+	}, [tree, completed, planned, includeX])
+
+	// Per-group projected credit-used, looked up by group id when drawing bars.
+	const projectedUsed = useMemo(() => {
+		const m = new Map<number, number>()
+		const walk = (g: ProgressGroupResult) => {
+			m.set(g.id, g.used)
+			for (const c of g.children) walk(c)
+		}
+		if (projected) walk(projected.root)
+		return m
+	}, [projected])
 
 	const courseInfo = useMemo(() => {
 		const m = new Map<string, { name: string; grade: string | null }>()
@@ -120,7 +150,18 @@ function ProgressView({
 						<Stat label="ยังขาด" value={progress.remaining} tone="text-amber-600" />
 						<Stat label="รวมทั้งหลักสูตร" value={progress.totalRequired} tone="text-slate-700" />
 					</div>
-					<ProgressBar percent={progress.percent} tone={progress.complete ? 'green' : 'brand'} />
+					<ProgressBar
+						percent={progress.percent}
+						secondaryPercent={
+							projected && progress.totalRequired > 0
+								? ((projected.totalUsed - progress.totalUsed) / progress.totalRequired) * 100
+								: 0
+						}
+						tone={progress.complete ? 'green' : 'brand'}
+					/>
+					{projected && projected.totalUsed > progress.totalUsed && (
+						<ProjectionSummary current={progress} projected={projected} />
+					)}
 					<label className="flex items-center gap-2 text-slate-500 text-xs">
 						<input
 							type="checkbox"
@@ -141,6 +182,7 @@ function ProgressView({
 						groupSubjects={groupSubjects}
 						takenSet={takenSet}
 						recommended={recommended}
+						projectedUsed={projectedUsed}
 						depth={0}
 					/>
 				))}
@@ -162,6 +204,36 @@ function ProgressView({
 	)
 }
 
+function ProjectionSummary({
+	current,
+	projected,
+}: {
+	current: ProgressResult
+	projected: ProgressResult
+}) {
+	const added = projected.totalUsed - current.totalUsed
+	const remaining = Math.max(0, projected.totalRequired - projected.totalUsed)
+	const estSubjects = Math.ceil(remaining / 3)
+	return (
+		<div className="space-y-1 rounded-lg bg-amber-50 px-3 py-2 text-xs">
+			<p className="text-amber-800">
+				<span className="inline-block h-2 w-2 rounded-full bg-amber-400 align-middle" />{' '}
+				<span className="font-semibold">ถ้าลงตามแผนเทอมนี้</span> (+{added} นก.) →{' '}
+				<span className="font-semibold">{projected.percent}%</span>
+				<span className="text-amber-600"> (ตอนนี้ {current.percent}%)</span>
+			</p>
+			{projected.complete ? (
+				<p className="text-green-700">ลงตามแผนแล้วครบทุกหมวดของหลักสูตร 🎉</p>
+			) : (
+				<p className="text-amber-700">
+					หลังจากนั้นเหลืออีก <span className="font-semibold">{remaining} นก.</span> (≈ {estSubjects}{' '}
+					วิชา) จะครบตามโครงสร้างหลักสูตร
+				</p>
+			)}
+		</div>
+	)
+}
+
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
 	return (
 		<div className="rounded-lg bg-slate-50 py-3">
@@ -177,6 +249,7 @@ function GroupNode({
 	groupSubjects,
 	takenSet,
 	recommended,
+	projectedUsed,
 	depth,
 }: {
 	group: ProgressGroupResult
@@ -184,6 +257,7 @@ function GroupNode({
 	groupSubjects: Map<number, GroupSubjectInfo[]>
 	takenSet: Set<string>
 	recommended: Set<string>
+	projectedUsed: Map<number, number>
 	depth: number
 }) {
 	const [open, setOpen] = useState(false)
@@ -193,6 +267,8 @@ function GroupNode({
 	const prefixMatched = group.matched.filter((id) => !defined.some((s) => s.id === id))
 	const takenCount = defined.filter((s) => takenSet.has(s.id)).length
 	const showSubjects = defined.length > 0 || prefixMatched.length > 0
+	const req = group.required
+	const planned = Math.max(0, (projectedUsed.get(group.id) ?? group.used) - group.used)
 
 	return (
 		<div
@@ -211,12 +287,14 @@ function GroupNode({
 					{group.complete && <Badge tone="green">✓</Badge>}
 				</div>
 				<span className="shrink-0 text-slate-500 text-xs">
-					{group.used}/{group.required} นก.
+					{group.used}/{req} นก.
+					{planned > 0 && <span className="text-amber-600"> (+{planned})</span>}
 				</span>
 			</div>
 			<ProgressBar
 				className="mt-2"
-				percent={group.required === 0 ? 0 : Math.min(100, (group.used / group.required) * 100)}
+				percent={req === 0 ? 0 : Math.min(100, (group.used / req) * 100)}
+				secondaryPercent={req === 0 ? 0 : (planned / req) * 100}
 				tone={group.complete ? 'green' : 'brand'}
 			/>
 
@@ -291,6 +369,7 @@ function GroupNode({
 							groupSubjects={groupSubjects}
 							takenSet={takenSet}
 							recommended={recommended}
+							projectedUsed={projectedUsed}
 							depth={depth + 1}
 						/>
 					))}
