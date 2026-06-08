@@ -1,4 +1,4 @@
-import { db, eq, schema, sql } from './index'
+import { db, eq, inArray, schema, sql } from './index'
 
 /**
  * KMITL Computer Engineering (Continuing) curriculum — ปป.64, 114 credits.
@@ -6,8 +6,9 @@ import { db, eq, schema, sql } from './index'
  * ToUnicode map drops Thai combining marks, so text extraction is lossy);
  * English names + codes + credits are verbatim from the document.
  *
- * Idempotent: subjects are upserted every run; the program/group/curriculum
- * structure is created only if the program does not already exist.
+ * Idempotent: subjects are upserted, the program/group/curriculum structure is
+ * created only once, and group↔subject links are synced (missing links added)
+ * every run.
  */
 
 type Subj = { id: string; nameTh: string; nameEn: string; credit: number; group: string }
@@ -477,9 +478,44 @@ const SUBJECTS: Subj[] = [
 		credit: 3,
 		group: 'e_cy',
 	},
+	{
+		id: '90641001',
+		nameTh: 'โรงเรียนสร้างเสน่ห์',
+		nameEn: 'CHARM SCHOOL',
+		credit: 2,
+		group: 'gen_basic',
+	},
+	{
+		id: '90641002',
+		nameTh: 'ความฉลาดทางดิจิทัล',
+		nameEn: 'DIGITAL INTELLIGENCE QUOTIENT',
+		credit: 3,
+		group: 'gen_basic',
+	},
+	{
+		id: '90641003',
+		nameTh: 'กีฬาและนันทนาการ',
+		nameEn: 'SPORTS AND RECREATIONAL ACTIVITIES',
+		credit: 1,
+		group: 'gen_basic',
+	},
+	{
+		id: '90644007',
+		nameTh: 'ภาษาอังกฤษพื้นฐาน 1',
+		nameEn: 'FOUNDATION ENGLISH 1',
+		credit: 3,
+		group: 'gen_lang',
+	},
+	{
+		id: '90644008',
+		nameTh: 'ภาษาอังกฤษพื้นฐาน 2',
+		nameEn: 'FOUNDATION ENGLISH 2',
+		credit: 3,
+		group: 'gen_lang',
+	},
 ]
 
-// Major-elective sub-area groups (each child of "กลุ่มวิชาเลือกเฉพาะสาขา").
+// Major-elective sub-area groups (children of "กลุ่มวิชาเลือกเฉพาะสาขา").
 const ELECTIVES: { key: string; name: string }[] = [
 	{ key: 'e_hw', name: 'เลือกสาขาฮาร์ดแวร์และสถาปัตยกรรมคอมพิวเตอร์' },
 	{ key: 'e_sw', name: 'เลือกสาขาการพัฒนาซอฟต์แวร์' },
@@ -491,10 +527,26 @@ const ELECTIVES: { key: string; name: string }[] = [
 	{ key: 'e_int', name: 'เลือกสาขาวิชาบูรณาการ' },
 ]
 
+// group key -> the curriculum_group.name it maps to (for resolving ids).
+const GROUP_NAME: Record<string, string> = {
+	eng: 'กลุ่มวิชาวิศวกรรมพื้นฐาน',
+	core: 'กลุ่มวิชาวิศวกรรมคอมพิวเตอร์พื้นฐาน',
+	gen_basic: 'วิชาพื้นฐาน',
+	gen_lang: 'วิชาด้านภาษาและการสื่อสาร',
+	e_hw: 'เลือกสาขาฮาร์ดแวร์และสถาปัตยกรรมคอมพิวเตอร์',
+	e_sw: 'เลือกสาขาการพัฒนาซอฟต์แวร์',
+	e_bd: 'เลือกสาขาข้อมูลขนาดใหญ่และธุรกิจอัจฉริยะ',
+	e_mm: 'เลือกสาขาการประมวลผลมัลติมีเดีย',
+	e_mi: 'เลือกสาขาเครื่องจักรอัจฉริยะ',
+	e_cy: 'เลือกสาขาความปลอดภัยไซเบอร์',
+	e_inf: 'เลือกสาขาโครงสร้างพื้นฐานของระบบ',
+	e_int: 'เลือกสาขาวิชาบูรณาการ',
+}
+
 async function main() {
 	console.log('🌱 seeding CE (Continuing) curriculum…')
 
-	// 1. Subjects — upsert (safe to re-run).
+	// 1. Subjects — upsert.
 	await db
 		.insert(schema.subject)
 		.values(SUBJECTS.map(({ id, nameTh, nameEn, credit }) => ({ id, nameTh, nameEn, credit })))
@@ -507,96 +559,116 @@ async function main() {
 			},
 		})
 
-	// 2. Structure — only once.
+	// 2. Structure — create once.
 	const existing = await db
 		.select({ id: schema.program.id })
 		.from(schema.program)
 		.where(eq(schema.program.nameEn, 'Computer Engineering (Continuing)'))
 		.limit(1)
-	if (existing.length) {
-		console.log('✅ subjects upserted; structure already present')
-		process.exit(0)
-	}
 
-	const [dept] = await db
-		.select()
-		.from(schema.department)
-		.where(eq(schema.department.nameEn, 'Computer Engineering'))
-		.limit(1)
-
-	const [prog] = await db
-		.insert(schema.program)
-		.values({
-			departmentId: dept?.id ?? null,
-			kmitlId: '010102',
-			nameTh: 'วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง)',
-			nameEn: 'Computer Engineering (Continuing)',
+	if (!existing.length) {
+		const [dept] = await db
+			.select()
+			.from(schema.department)
+			.where(eq(schema.department.nameEn, 'Computer Engineering'))
+			.limit(1)
+		const [prog] = await db
+			.insert(schema.program)
+			.values({
+				departmentId: dept?.id ?? null,
+				kmitlId: '010102',
+				nameTh: 'วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง)',
+				nameEn: 'Computer Engineering (Continuing)',
+			})
+			.returning()
+		const g = async (v: typeof schema.curriculumGroup.$inferInsert) =>
+			(await db.insert(schema.curriculumGroup).values(v).returning())[0]!.id
+		const root = await g({
+			parentId: null,
+			type: 'root',
+			name: 'หลักสูตร วศ.บ. วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง) ปป.64',
+			credit: 114,
+			color: '#2563eb',
 		})
-		.returning()
-
-	const g = async (v: typeof schema.curriculumGroup.$inferInsert) =>
-		(await db.insert(schema.curriculumGroup).values(v).returning())[0]!.id
-
-	const root = await g({
-		parentId: null,
-		type: 'root',
-		name: 'หลักสูตร วศ.บ. วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง) ปป.64',
-		credit: 114,
-		color: '#2563eb',
-	})
-	const gen = await g({
-		parentId: root,
-		type: 'category',
-		name: 'หมวดวิชาศึกษาทั่วไป',
-		credit: 30,
-		color: '#0891b2',
-	})
-	for (const [name, credit] of [
-		['วิชาพื้นฐาน', 6],
-		['วิชาด้านภาษาและการสื่อสาร', 9],
-		['วิชาตามเกณฑ์ของคณะ', 9],
-		['วิชาเลือก', 6],
-	] as const) {
-		await g({ parentId: gen, type: 'subgroup', name, credit })
+		const gen = await g({
+			parentId: root,
+			type: 'category',
+			name: 'หมวดวิชาศึกษาทั่วไป',
+			credit: 30,
+			color: '#0891b2',
+		})
+		for (const [name, credit] of [
+			['วิชาพื้นฐาน', 6],
+			['วิชาด้านภาษาและการสื่อสาร', 9],
+			['วิชาตามเกณฑ์ของคณะ', 9],
+			['วิชาเลือก', 6],
+		] as const)
+			await g({ parentId: gen, type: 'subgroup', name, credit })
+		const major = await g({
+			parentId: root,
+			type: 'category',
+			name: 'หมวดวิชาเฉพาะ',
+			credit: 78,
+			color: '#2563eb',
+		})
+		await g({ parentId: major, type: 'subgroup', name: 'กลุ่มวิชาวิศวกรรมพื้นฐาน', credit: 8 })
+		await g({ parentId: major, type: 'subgroup', name: 'กลุ่มวิชาวิศวกรรมคอมพิวเตอร์พื้นฐาน', credit: 58 })
+		const elec = await g({
+			parentId: major,
+			type: 'subgroup',
+			name: 'กลุ่มวิชาเลือกเฉพาะสาขา',
+			credit: 12,
+		})
+		for (const e of ELECTIVES) await g({ parentId: elec, type: 'elective', name: e.name })
+		await g({
+			parentId: root,
+			type: 'category',
+			name: 'หมวดวิชาเลือกเสรี',
+			credit: 6,
+			color: '#64748b',
+		})
+		await db.insert(schema.curriculum).values({
+			programId: prog!.id,
+			groupId: root,
+			year: 2564,
+			nameTh: 'หลักสูตรวิศวกรรมศาสตรบัณฑิต สาขาวิชาวิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง)',
+			nameEn: 'Bachelor of Engineering in Computer Engineering (Continuing)',
+		})
 	}
-	const major = await g({
-		parentId: root,
-		type: 'category',
-		name: 'หมวดวิชาเฉพาะ',
-		credit: 78,
-		color: '#2563eb',
-	})
-	const eng = await g({ parentId: major, type: 'subgroup', name: 'กลุ่มวิชาวิศวกรรมพื้นฐาน', credit: 8 })
-	const core = await g({
-		parentId: major,
-		type: 'subgroup',
-		name: 'กลุ่มวิชาวิศวกรรมคอมพิวเตอร์พื้นฐาน',
-		credit: 58,
-	})
-	const elec = await g({
-		parentId: major,
-		type: 'subgroup',
-		name: 'กลุ่มวิชาเลือกเฉพาะสาขา',
-		credit: 12,
-	})
-	const groupId: Record<string, number> = { eng, core }
-	for (const e of ELECTIVES)
-		groupId[e.key] = await g({ parentId: elec, type: 'elective', name: e.name })
-	await g({ parentId: root, type: 'category', name: 'หมวดวิชาเลือกเสรี', credit: 6, color: '#64748b' })
 
-	await db.insert(schema.curriculum).values({
-		programId: prog!.id,
-		groupId: root,
-		year: 2564,
-		nameTh: 'หลักสูตรวิศวกรรมศาสตรบัณฑิต สาขาวิชาวิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง)',
-		nameEn: 'Bachelor of Engineering in Computer Engineering (Continuing)',
-	})
+	// 3. group↔subject links — resolve group ids by name, add any that are missing.
+	const names = [...new Set(SUBJECTS.map((s) => GROUP_NAME[s.group]!))]
+	const grows = await db
+		.select({ id: schema.curriculumGroup.id, name: schema.curriculumGroup.name })
+		.from(schema.curriculumGroup)
+		.where(inArray(schema.curriculumGroup.name, names))
+	const nameToId = new Map(grows.map((r) => [r.name, r.id]))
+	const have = new Set(
+		(
+			await db
+				.select({
+					g: schema.curriculumGroupSubject.groupId,
+					s: schema.curriculumGroupSubject.subjectId,
+				})
+				.from(schema.curriculumGroupSubject)
+				.where(
+					inArray(
+						schema.curriculumGroupSubject.subjectId,
+						SUBJECTS.map((s) => s.id),
+					),
+				)
+		).map((l) => `${l.g}:${l.s}`),
+	)
+	const toAdd = SUBJECTS.map((s) => ({
+		groupId: nameToId.get(GROUP_NAME[s.group]!),
+		subjectId: s.id,
+	})).filter(
+		(l): l is { groupId: number; subjectId: string } =>
+			!!l.groupId && !have.has(`${l.groupId}:${l.subjectId}`),
+	)
+	if (toAdd.length) await db.insert(schema.curriculumGroupSubject).values(toAdd)
 
-	await db
-		.insert(schema.curriculumGroupSubject)
-		.values(SUBJECTS.map((s) => ({ groupId: groupId[s.group]!, subjectId: s.id })))
-
-	console.log(`✅ CE (Continuing): ${SUBJECTS.length} subjects + ${ELECTIVES.length + 7} groups`)
+	console.log(`✅ CE (Continuing): ${SUBJECTS.length} subjects, +${toAdd.length} links`)
 	process.exit(0)
 }
 
