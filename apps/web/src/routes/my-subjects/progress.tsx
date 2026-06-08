@@ -345,7 +345,9 @@ function ProjectionSummary({
 	)
 }
 
-/** Catalog search to pick free-elective subjects (เลือกเสรี has no fixed list). */
+/** Pick free-elective subjects (เลือกเสรี has no fixed list). Browse the subjects
+ *  offered this term (registrar teach-table → local subject_class), filter by
+ *  name/code, page through them, and add the ones to count toward เลือกเสรี. */
 function FreeElectivePicker({
 	picks,
 	takenSet,
@@ -359,10 +361,10 @@ function FreeElectivePicker({
 }) {
 	const [q, setQ] = useState('')
 	const [applied, setApplied] = useState('')
-	const { data } = useQuery({
-		...subjectsQuery({ q: applied, page: 1, pageSize: 8 }),
-		enabled: applied.length >= 2,
-	})
+	const [page, setPage] = useState(1)
+	const { data } = useQuery(
+		subjectsQuery({ q: applied || undefined, openOnly: true, page, pageSize: 8 }),
+	)
 
 	return (
 		<div className="mt-2 space-y-2">
@@ -390,64 +392,95 @@ function FreeElectivePicker({
 					))}
 				</ul>
 			)}
+			<p className="text-slate-500 text-xs">เลือกจากวิชาที่เปิดสอนเทอมนี้:</p>
 			<form
 				className="flex gap-2"
 				onSubmit={(e) => {
 					e.preventDefault()
 					setApplied(q.trim())
+					setPage(1)
 				}}
 			>
 				<input
 					value={q}
 					onChange={(e) => setQ(e.target.value)}
-					placeholder="ค้นหาวิชาเลือกเสรี (ชื่อ/รหัส)…"
+					placeholder="กรองด้วยชื่อ/รหัสวิชา…"
 					className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs"
 				/>
 				<button
 					type="submit"
 					className="shrink-0 rounded-md bg-brand-50 px-3 py-1 font-medium text-brand-700 text-xs hover:bg-brand-100"
 				>
-					ค้นหา
+					กรอง
 				</button>
 			</form>
-			{applied.length >= 2 && data && (
-				<ul className="space-y-1">
-					{data.items.length === 0 ? (
-						<li className="text-slate-400 text-xs">ไม่พบวิชา</li>
-					) : (
-						data.items.map((s) => {
-							const picked = picks.has(s.id)
-							const taken = takenSet.has(s.id)
-							return (
-								<li key={s.id} className="flex items-center gap-2 text-xs">
-									<span className="flex-1 truncate text-slate-600">
-										{s.id} {s.nameTh ?? s.nameEn}
-									</span>
-									<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
-									{taken ? (
-										<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>
-									) : picked ? (
-										<span className="shrink-0 text-amber-600 text-[11px]">เลือกแล้ว</span>
-									) : (
-										<button
-											type="button"
-											onClick={() =>
-												onPick({
-													id: s.id,
-													name: s.nameTh ?? s.nameEn ?? s.id,
-													credit: s.credit ?? 0,
-												})
-											}
-											className="shrink-0 text-brand-700 hover:underline"
+			{data && (
+				<>
+					<ul className="space-y-1">
+						{data.items.length === 0 ? (
+							<li className="text-slate-400 text-xs">ไม่พบวิชาที่เปิดสอน</li>
+						) : (
+							data.items.map((s) => {
+								const picked = picks.has(s.id)
+								const taken = takenSet.has(s.id)
+								return (
+									<li key={s.id} className="flex items-center gap-2 text-xs">
+										<Link
+											to="/subjects/$subjectId"
+											params={{ subjectId: s.id }}
+											className="flex-1 truncate text-slate-600 hover:text-brand-700"
 										>
-											+ เพิ่ม
-										</button>
-									)}
-								</li>
-							)
-						})
+											{s.id} {s.nameTh ?? s.nameEn}
+										</Link>
+										<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
+										{taken ? (
+											<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>
+										) : picked ? (
+											<span className="shrink-0 text-amber-600 text-[11px]">เลือกแล้ว</span>
+										) : (
+											<button
+												type="button"
+												onClick={() =>
+													onPick({
+														id: s.id,
+														name: s.nameTh ?? s.nameEn ?? s.id,
+														credit: s.credit ?? 0,
+													})
+												}
+												className="shrink-0 text-brand-700 hover:underline"
+											>
+												+ เพิ่ม
+											</button>
+										)}
+									</li>
+								)
+							})
+						)}
+					</ul>
+					{data.totalPages > 1 && (
+						<div className="flex items-center justify-center gap-3 text-slate-500 text-xs">
+							<button
+								type="button"
+								disabled={page <= 1}
+								onClick={() => setPage((p) => p - 1)}
+								className="disabled:opacity-40"
+							>
+								‹ ก่อนหน้า
+							</button>
+							<span>
+								{data.page}/{data.totalPages}
+							</span>
+							<button
+								type="button"
+								disabled={page >= data.totalPages}
+								onClick={() => setPage((p) => p + 1)}
+								className="disabled:opacity-40"
+							>
+								ถัดไป ›
+							</button>
+						</div>
 					)}
-				</ul>
+				</>
 			)}
 		</div>
 	)
