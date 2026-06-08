@@ -511,9 +511,18 @@ export const getSubjectSchedules = createServerFn({ method: 'GET' })
 		return [...bySubj.values()]
 	})
 
-/** Distinct subject ids offered this (latest) term — for "เปิดสอน" badges. */
-export const listOfferedSubjectIds = createServerFn({ method: 'GET' }).handler(
-	async (): Promise<string[]> => {
+export type OfferedSchedule = {
+	subjectId: string
+	day: number | null
+	timeStart: string | null
+	timeEnd: string | null
+	sections: number
+}
+
+/** Subjects offered this (latest) term with a representative day/time + section
+ *  count — for the "เปิดสอน" badge. One row per subject. */
+export const listOfferedSchedules = createServerFn({ method: 'GET' }).handler(
+	async (): Promise<OfferedSchedule[]> => {
 		const [cur] = await db
 			.select({ id: schema.teachtable.id })
 			.from(schema.teachtable)
@@ -521,10 +530,34 @@ export const listOfferedSubjectIds = createServerFn({ method: 'GET' }).handler(
 			.limit(1)
 		if (!cur) return []
 		const rows = await db
-			.selectDistinct({ subjectId: schema.subjectClass.subjectId })
+			.select({
+				subjectId: schema.subjectClass.subjectId,
+				section: schema.subjectClass.section,
+				day: schema.subjectClass.day,
+				timeStart: schema.subjectClass.timeStart,
+				timeEnd: schema.subjectClass.timeEnd,
+			})
 			.from(schema.subjectClass)
 			.where(eq(schema.subjectClass.teachtableId, cur.id))
-		return rows.map((r) => r.subjectId).filter((id): id is string => !!id)
+			.orderBy(schema.subjectClass.subjectId, schema.subjectClass.section)
+
+		const bySubj = new Map<string, OfferedSchedule>()
+		for (const r of rows) {
+			if (!r.subjectId) continue
+			const e = bySubj.get(r.subjectId)
+			if (!e) {
+				bySubj.set(r.subjectId, {
+					subjectId: r.subjectId,
+					day: r.day,
+					timeStart: r.timeStart,
+					timeEnd: r.timeEnd,
+					sections: 1,
+				})
+			} else {
+				e.sections++
+			}
+		}
+		return [...bySubj.values()]
 	},
 )
 

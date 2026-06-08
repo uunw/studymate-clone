@@ -13,13 +13,24 @@ import {
 	myCurriculumTreeQuery,
 	myPlanSelectionQuery,
 	myTranscriptQuery,
-	offeredSubjectIdsQuery,
+	offeredSchedulesQuery,
 	registrationPlanQuery,
 	subjectSchedulesQuery,
 } from '~/queries'
 import { savePlanSelection } from '~/server/plan'
 import type { CurriculumTree } from '~/server/progress'
-import type { SubjectSchedule } from '~/server/subjects'
+import type { OfferedSchedule, SubjectSchedule } from '~/server/subjects'
+
+const DAY_ABBR = ['', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา']
+const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '')
+/** "เปิดสอน · จ 09:00-12:00 +2 sec" for the badge. */
+function offeredLabel(o: OfferedSchedule): string {
+	const day = o.day ? DAY_ABBR[o.day] : ''
+	const time = o.timeStart ? `${hhmm(o.timeStart)}-${hhmm(o.timeEnd)}` : ''
+	const extra = o.sections > 1 ? ` +${o.sections - 1} sec` : ''
+	const detail = ([day, time].filter(Boolean).join(' ') + extra).trim()
+	return detail ? `เปิดสอน · ${detail}` : 'เปิดสอน'
+}
 
 export const Route = createFileRoute('/my-subjects/progress')({
 	loader: async ({ context }) => {
@@ -137,9 +148,9 @@ function ProgressView({
 		[details],
 	)
 
-	// Subjects offered this term — for the "เปิดสอน" badge.
-	const { data: offered } = useQuery(offeredSubjectIdsQuery())
-	const offeredSet = useMemo(() => new Set(offered ?? []), [offered])
+	// Subjects offered this term (with day/time) — for the "เปิดสอน" badge.
+	const { data: offered } = useQuery(offeredSchedulesQuery())
+	const offeredMap = useMemo(() => new Map((offered ?? []).map((o) => [o.subjectId, o])), [offered])
 
 	// Free-elective subjects picked from the catalog (เลือกเสรี has no predefined
 	// list — the student picks any subject). id → name/credit, for display + credit.
@@ -395,7 +406,7 @@ function ProgressView({
 						courseInfo={courseInfo}
 						groupSubjects={groupSubjects}
 						takenSet={takenSet}
-						offeredSet={offeredSet}
+						offeredMap={offeredMap}
 						recommended={recommended}
 						simulated={simulated}
 						onToggle={toggleSim}
@@ -587,7 +598,7 @@ function GroupNode({
 	courseInfo,
 	groupSubjects,
 	takenSet,
-	offeredSet,
+	offeredMap,
 	recommended,
 	simulated,
 	onToggle,
@@ -602,7 +613,7 @@ function GroupNode({
 	courseInfo: Map<string, { name: string; grade: string | null }>
 	groupSubjects: Map<number, GroupSubjectInfo[]>
 	takenSet: Set<string>
-	offeredSet: Set<string>
+	offeredMap: Map<string, OfferedSchedule>
 	recommended: Set<string>
 	simulated: Set<string>
 	onToggle: (id: string) => void
@@ -697,7 +708,11 @@ function GroupNode({
 											{s.id} {s.name}
 										</Link>
 										<span className="shrink-0 text-slate-400">{s.credit} นก.</span>
-										{offeredSet.has(s.id) && <Badge tone="green">เปิดสอน</Badge>}
+										{offeredMap.has(s.id) && (
+											<Badge tone="green" className="whitespace-nowrap">
+												{offeredLabel(offeredMap.get(s.id)!)}
+											</Badge>
+										)}
 										{!taken && recommended.has(s.id) && <Badge tone="brand">แนะนำ</Badge>}
 										{taken && courseInfo.get(s.id)?.grade && (
 											<span className="shrink-0 font-medium text-green-600">
@@ -742,7 +757,7 @@ function GroupNode({
 							courseInfo={courseInfo}
 							groupSubjects={groupSubjects}
 							takenSet={takenSet}
-							offeredSet={offeredSet}
+							offeredMap={offeredMap}
 							recommended={recommended}
 							simulated={simulated}
 							onToggle={onToggle}
