@@ -1,84 +1,80 @@
-import { SUBJECT_ID_RE, VALID_GRADES } from '../constants'
+import { SUBJECT_ID_RE } from '../constants'
 
 export type ParsedRow = {
 	subjectId: string
+	nameEn: string | null
 	grade: string
 	credit: number | null
 	year: number | null
 	term: number | null
 }
 
-// Grades ordered longest-first so "B+" wins over "B" when matching.
-const GRADE_ALT = [...VALID_GRADES, 'W', 'WS']
-	.sort((a, b) => b.length - a.length)
-	.map((g) => g.replace('+', '\\+'))
-	.join('|')
+// A subject cell: 8-digit code, name (which must NOT contain another code),
+// single-digit credit, grade (normal A..F/S/U/W or transfer T(x)). Global so a
+// two-column line — or unpdf's single-line dump — yields every cell.
+const ROW_RE = /(\d{8})\s+((?:(?!\d{8}).)+?)\s+([1-9])\s+(T\([A-Z][+]?\)|[A-F][+]?|S|U|W)(?=\s|$)/g
 
-// A row line: 8-digit code … optional credit … trailing grade token.
-const ROW_RE = new RegExp(
-	`(?<code>\\d{8})\\b.*?(?:\\s(?<credit>\\d(?:\\.\\d)?)\\s)?\\s*(?<grade>${GRADE_ALT})\\s*$`,
-)
-
-// Header lines that scope the following rows to a year/term.
-//  Thai:    "ภาคการศึกษาที่ 1 ปีการศึกษา 2566"  (term then year)
-//  English: "Semester 1 / 2566" or "First Semester 2566"
-const TH_HEADER_RE = /ภาคการศึกษาที่\s*(\d).*?(?:25\d{2}|20\d{2})/
-const TH_YEAR_RE = /(?:25\d{2}|20\d{2})/
-const EN_HEADER_RE = /semester\s*(\d)\s*[/-]?\s*((?:25|20)\d{2})/i
-const EN_WORD_HEADER_RE = /\b(first|second|third)\s+semester\b.*?((?:25|20)\d{2})/i
+// Term/semester headers (collected by position, since unpdf strips newlines):
+//  English: "1st Semester, Year, 2024-2025"  ·  "Semester 1 / 2566"  ·  "First Semester 2566"
+//  Thai:    "ภาคการศึกษาที่ 1 ปีการศึกษา 2566"
+const EN_ORD_G = /(\d)(?:st|nd|rd|th)\s+Semester[^\n]*?((?:19|20|25)\d{2})/gi
+const EN_NUM_G = /\bSemester\s*(\d)\s*[/-]?\s*((?:25|20)\d{2})/gi
+const EN_WORD_G = /\b(first|second|third)\s+Semester\b[^\n]*?((?:25|20)\d{2})/gi
+const TH_G = /ภาคการศึกษาที่\s*(\d)[^\n]*?((?:25|20)\d{2})/g
 const WORD_TERM: Record<string, number> = { first: 1, second: 2, third: 3 }
 
+/** Gregorian academic-start year → Buddhist year (KMITL uses พ.ศ.). */
+const toBuddhist = (y: number) => (y < 2500 ? y + 543 : y)
+const normGrade = (g: string) => (g.startsWith('T(') ? 'T' : g.toUpperCase())
+
+type Header = { index: number; term: number; year: number }
+
+function collectHeaders(text: string): Header[] {
+	const hs: Header[] = []
+	const add = (re: RegExp, term: (m: RegExpExecArray) => number) => {
+		re.lastIndex = 0
+		for (let m = re.exec(text); m; m = re.exec(text)) {
+			hs.push({ index: m.index, term: term(m), year: toBuddhist(Number(m[2])) })
+		}
+	}
+	add(EN_ORD_G, (m) => Number(m[1]))
+	add(EN_NUM_G, (m) => Number(m[1]))
+	add(EN_WORD_G, (m) => WORD_TERM[m[1]!.toLowerCase()] ?? 0)
+	add(TH_G, (m) => Number(m[1]))
+	return hs.sort((a, b) => a.index - b.index)
+}
+
 /**
- * Best-effort port of the original C# (UglyToad.PdfPig) transcript parser.
- * Pure + line-oriented so it can be unit-tested without a real PDF.
- *
- * Scans top-to-bottom: header lines update the "current" (year, term); any line
- * carrying an 8-digit subject code + a trailing grade becomes a row stamped with
- * the current year/term.
+ * Parse a KMITL transcript's plain text into graded course rows. Position-based
+ * (not line-based) so it works whether the extractor preserves layout
+ * (pdftotext) or flattens everything onto one line (unpdf/pdf.js). Handles the
+ * official English transcript (two-column, transfer T(grade) cells, Gregorian
+ * academic years) and the older Thai layout.
  */
 export function parseTranscriptText(text: string): ParsedRow[] {
+	const headers = collectHeaders(text)
 	const rows: ParsedRow[] = []
-	let year: number | null = null
-	let term: number | null = null
 
-	for (const raw of text.split(/\r?\n/)) {
-		const line = raw.trim()
-		if (!line) continue
+	ROW_RE.lastIndex = 0
+	for (let m = ROW_RE.exec(text); m; m = ROW_RE.exec(text)) {
+		const [, code, name, credit, grade] = m
+		if (!code || !grade || !SUBJECT_ID_RE.test(code)) continue
 
-		// --- header detection ---
-		const en = EN_HEADER_RE.exec(line)
-		if (en) {
-			term = Number(en[1])
-			year = Number(en[2])
-			continue
-		}
-		const enWord = EN_WORD_HEADER_RE.exec(line)
-		if (enWord) {
-			term = WORD_TERM[enWord[1]!.toLowerCase()] ?? null
-			year = Number(enWord[2])
-			continue
-		}
-		const th = TH_HEADER_RE.exec(line)
-		if (th) {
-			term = Number(th[1])
-			year = Number(TH_YEAR_RE.exec(line)?.[0] ?? '') || null
-			continue
+		// term in effect = the last header positioned before this row
+		let cur: Header | undefined
+		for (const h of headers) {
+			if (h.index < m.index) cur = h
+			else break
 		}
 
-		// --- row detection ---
-		const m = ROW_RE.exec(line)
-		if (m?.groups) {
-			const { code, grade, credit } = m.groups
-			if (code && grade && SUBJECT_ID_RE.test(code)) {
-				rows.push({
-					subjectId: code,
-					grade: grade.toUpperCase(),
-					credit: credit ? Number(credit) : null,
-					year,
-					term,
-				})
-			}
-		}
+		rows.push({
+			subjectId: code,
+			nameEn: name?.trim() || null,
+			grade: normGrade(grade),
+			credit: credit ? Number(credit) : null,
+			year: cur?.year ?? null,
+			term: cur?.term ?? null,
+		})
 	}
 
 	return dedupeRows(rows)

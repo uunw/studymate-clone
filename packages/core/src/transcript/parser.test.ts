@@ -35,4 +35,37 @@ describe('parseTranscriptText', () => {
 	it('ignores lines without a valid subject code or grade', () => {
 		expect(parseTranscriptText('Transcript of Records\nName: Test User')).toHaveLength(0)
 	})
+
+	it('parses the official English transcript (ordinal header, Buddhist year)', () => {
+		const text = [
+			'1st Semester, Year, 2024-2025',
+			'01076031 CALCULUS                3      C',
+			'90644007 FOUNDATION ENGLISH 1    3      S',
+		].join('\n')
+		const rows = parseTranscriptText(text)
+		expect(rows).toHaveLength(2)
+		// 2024 (Gregorian academic start) → 2567 พ.ศ.
+		expect(rows[0]).toMatchObject({
+			subjectId: '01076031',
+			grade: 'C',
+			credit: 3,
+			year: 2567,
+			term: 1,
+		})
+		expect(rows[1]).toMatchObject({
+			subjectId: '90644007',
+			grade: 'S',
+			term: 1,
+			nameEn: 'FOUNDATION ENGLISH 1',
+		})
+	})
+
+	it('parses two-column lines and normalizes transfer T(x) grades', () => {
+		const rows = parseTranscriptText(
+			'90641003 SPORTS AND RECREATION 1 T(S)   01076034 SOFTWARE DEV PROCESS 3 C+',
+		)
+		expect(rows).toHaveLength(2)
+		expect(rows[0]).toMatchObject({ subjectId: '90641003', grade: 'T', credit: 1 })
+		expect(rows[1]).toMatchObject({ subjectId: '01076034', grade: 'C+', credit: 3 })
+	})
 })

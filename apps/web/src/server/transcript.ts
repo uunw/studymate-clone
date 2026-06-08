@@ -51,16 +51,19 @@ export const uploadTranscript = createServerFn({ method: 'POST' })
 		await db.delete(schema.transcript).where(eq(schema.transcript.userId, user.id))
 		const [transcript] = await db.insert(schema.transcript).values({ userId: user.id }).returning()
 
+		// Ensure every parsed subject exists (insert stubs for ones not in our
+		// catalog, from the transcript's English name + credit; don't overwrite).
+		const subjValues = [...new Map(rows.map((r) => [r.subjectId, r])).values()].map((r) => ({
+			id: r.subjectId,
+			nameEn: r.nameEn,
+			credit: r.credit,
+		}))
+		if (subjValues.length) {
+			await db.insert(schema.subject).values(subjValues).onConflictDoNothing()
+		}
+
 		let imported = 0
 		for (const r of rows) {
-			// Only keep rows whose subject exists in our catalog.
-			const [subj] = await db
-				.select({ id: schema.subject.id })
-				.from(schema.subject)
-				.where(eq(schema.subject.id, r.subjectId))
-				.limit(1)
-			if (!subj) continue
-
 			let teachtableId: number | null = null
 			if (r.year && r.term) {
 				const [tt] = await db
