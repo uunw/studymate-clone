@@ -91,6 +91,7 @@ type Section = {
 	teacher_list_en: string | null
 	limit: string | number | null
 	count: number | null
+	pre_count: string | number | null
 	closed: string | null
 	midterm_start_date_time: string | null
 	final_start_date_time: string | null
@@ -246,6 +247,7 @@ async function main() {
 						teacherEn: stripHtml(it.teacher_list_en),
 						capacity: num(it.limit),
 						enrolled: num(it.count),
+						preCount: num(it.pre_count),
 						closed: it.closed === '1',
 						examMidterm: it.midterm_start_date_time ?? null,
 						examFinal: it.final_start_date_time ?? null,
@@ -282,6 +284,7 @@ async function main() {
 						section: sql`excluded.section`,
 						capacity: sql`excluded.capacity`,
 						enrolled: sql`excluded.enrolled`,
+						preCount: sql`excluded.pre_count`,
 						closed: sql`excluded.closed`,
 						examMidterm: sql`excluded.exam_midterm`,
 						examFinal: sql`excluded.exam_final`,

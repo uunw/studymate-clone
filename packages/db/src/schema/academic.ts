@@ -139,8 +139,9 @@ export const subjectClass = pgTable('subject_class', {
 	building: varchar('building', { length: 64 }),
 	teacherTh: text('teacher_th'),
 	teacherEn: text('teacher_en'),
-	capacity: integer('capacity'),
-	enrolled: integer('enrolled'),
+	capacity: integer('capacity'), // รับ (limit)
+	enrolled: integer('enrolled'), // ลง (count)
+	preCount: integer('pre_count'), // ลงล่วงหน้า (pre_count)
 	closed: boolean('closed').default(false),
 	// exam date-times + registration conditions (เงื่อนไข) from the teach-table
 	examMidterm: text('exam_midterm'),

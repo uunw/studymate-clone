@@ -1,0 +1,1 @@
+ALTER TABLE "subject_class" ADD COLUMN "pre_count" integer;

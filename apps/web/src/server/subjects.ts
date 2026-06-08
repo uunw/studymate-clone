@@ -517,6 +517,8 @@ export type OfferedSchedule = {
 	timeStart: string | null
 	timeEnd: string | null
 	sections: number
+	capacity: number // total seats (รับ) across sections
+	preCount: number // total pre-registered (ลงล่วงหน้า) across sections
 }
 
 /** Subjects offered this (latest) term with a representative day/time + section
@@ -536,6 +538,8 @@ export const listOfferedSchedules = createServerFn({ method: 'GET' }).handler(
 				day: schema.subjectClass.day,
 				timeStart: schema.subjectClass.timeStart,
 				timeEnd: schema.subjectClass.timeEnd,
+				capacity: schema.subjectClass.capacity,
+				preCount: schema.subjectClass.preCount,
 			})
 			.from(schema.subjectClass)
 			.where(eq(schema.subjectClass.teachtableId, cur.id))
@@ -552,9 +556,13 @@ export const listOfferedSchedules = createServerFn({ method: 'GET' }).handler(
 					timeStart: r.timeStart,
 					timeEnd: r.timeEnd,
 					sections: 1,
+					capacity: r.capacity ?? 0,
+					preCount: r.preCount ?? 0,
 				})
 			} else {
 				e.sections++
+				e.capacity += r.capacity ?? 0
+				e.preCount += r.preCount ?? 0
 			}
 		}
 		return [...bySubj.values()]

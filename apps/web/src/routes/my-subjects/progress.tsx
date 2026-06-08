@@ -23,13 +23,16 @@ import type { OfferedSchedule, SubjectSchedule } from '~/server/subjects'
 
 const DAY_ABBR = ['', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา']
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '')
-/** "เปิดสอน · จ 09:00-12:00 +2 sec" for the badge. */
+/** "เปิดสอน · จ 09:00-12:00 +2 sec · 50/90" (ลงล่วงหน้า/รับ) for the badge. */
 function offeredLabel(o: OfferedSchedule): string {
 	const day = o.day ? DAY_ABBR[o.day] : ''
 	const time = o.timeStart ? `${hhmm(o.timeStart)}-${hhmm(o.timeEnd)}` : ''
 	const extra = o.sections > 1 ? ` +${o.sections - 1} sec` : ''
-	const detail = ([day, time].filter(Boolean).join(' ') + extra).trim()
-	return detail ? `เปิดสอน · ${detail}` : 'เปิดสอน'
+	const seats = o.capacity > 0 ? `${o.preCount}/${o.capacity}` : ''
+	const parts = [[day, time].filter(Boolean).join(' ') + extra, seats]
+		.map((p) => p.trim())
+		.filter(Boolean)
+	return parts.length ? `เปิดสอน · ${parts.join(' · ')}` : 'เปิดสอน'
 }
 
 export const Route = createFileRoute('/my-subjects/progress')({
@@ -709,7 +712,11 @@ function GroupNode({
 										</Link>
 										<span className="shrink-0 text-slate-400">{s.credit} นก.</span>
 										{offeredMap.has(s.id) && (
-											<Badge tone="green" className="whitespace-nowrap">
+											<Badge
+												tone="green"
+												className="whitespace-nowrap"
+												title="วัน-เวลาเรียน · ลงล่วงหน้า/รับ"
+											>
 												{offeredLabel(offeredMap.get(s.id)!)}
 											</Badge>
 										)}
