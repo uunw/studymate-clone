@@ -1,3 +1,4 @@
+import { authClient } from '@repo/auth/client'
 import { profileSchema } from '@repo/core/schemas'
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
@@ -5,7 +6,12 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { curriculaQuery } from '~/queries'
-import { selectCurriculum, updateProfile } from '~/server/profile'
+import { selectCurriculum, updateAvatar, updateProfile } from '~/server/profile'
+
+const AVATAR_STYLE = 'thumbs'
+const avatarUrl = (seed: string) =>
+	`https://api.dicebear.com/9.x/${AVATAR_STYLE}/svg?seed=${encodeURIComponent(seed)}`
+const randomSeeds = () => Array.from({ length: 8 }, () => Math.random().toString(36).slice(2, 10))
 
 export const Route = createFileRoute('/profile')({
 	beforeLoad: ({ context }) => {
@@ -24,6 +30,18 @@ function Profile() {
 
 	const [profileSaved, setProfileSaved] = useState(false)
 	const [curriculumError, setCurriculumError] = useState<string | null>(null)
+	const [seeds, setSeeds] = useState<string[]>(randomSeeds)
+	const [avatarBusy, setAvatarBusy] = useState(false)
+
+	async function pickAvatar(url: string) {
+		setAvatarBusy(true)
+		try {
+			await updateAvatar({ data: url })
+			await router.invalidate()
+		} finally {
+			setAvatarBusy(false)
+		}
+	}
 
 	const profileForm = useForm({
 		defaultValues: {
@@ -154,6 +172,126 @@ function Profile() {
 					</Field>
 				</CardBody>
 			</Card>
+
+			<Card>
+				<CardHeader>
+					<h2 className="font-semibold text-slate-900">รูปโปรไฟล์</h2>
+				</CardHeader>
+				<CardBody className="space-y-4">
+					<div className="flex items-center gap-4">
+						<img
+							src={user.image ?? avatarUrl(user.id)}
+							alt="avatar"
+							className="h-16 w-16 rounded-full border border-slate-200 bg-white"
+						/>
+						<div>
+							<p className="font-medium text-slate-800 text-sm">รูปปัจจุบัน</p>
+							<p className="text-slate-400 text-xs">เลือกรูปแบบสุ่มด้านล่าง</p>
+						</div>
+					</div>
+					<div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
+						{seeds.map((seed) => {
+							const url = avatarUrl(seed)
+							return (
+								<button
+									key={seed}
+									type="button"
+									disabled={avatarBusy}
+									onClick={() => pickAvatar(url)}
+									className="rounded-full border-2 border-transparent transition-colors hover:border-brand-400 disabled:opacity-50"
+								>
+									<img src={url} alt="avatar option" className="h-12 w-12 rounded-full bg-white" />
+								</button>
+							)
+						})}
+					</div>
+					<Button variant="ghost" size="sm" onClick={() => setSeeds(randomSeeds())}>
+						สุ่มรูปใหม่
+					</Button>
+				</CardBody>
+			</Card>
+
+			<PasswordCard />
 		</div>
+	)
+}
+
+function PasswordCard() {
+	const [current, setCurrent] = useState('')
+	const [next, setNext] = useState('')
+	const [confirm, setConfirm] = useState('')
+	const [busy, setBusy] = useState(false)
+	const [msg, setMsg] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+
+	async function onSubmit(e: React.FormEvent) {
+		e.preventDefault()
+		if (next.length < 8) {
+			setMsg({ tone: 'error', text: 'รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร' })
+			return
+		}
+		if (next !== confirm) {
+			setMsg({ tone: 'error', text: 'รหัสผ่านยืนยันไม่ตรงกัน' })
+			return
+		}
+		setBusy(true)
+		setMsg(null)
+		const res = await authClient.changePassword({
+			currentPassword: current,
+			newPassword: next,
+			revokeOtherSessions: false,
+		})
+		setBusy(false)
+		if (res.error) {
+			setMsg({ tone: 'error', text: res.error.message ?? 'เปลี่ยนรหัสผ่านไม่สำเร็จ' })
+			return
+		}
+		setMsg({ tone: 'success', text: 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว' })
+		setCurrent('')
+		setNext('')
+		setConfirm('')
+	}
+
+	return (
+		<Card>
+			<CardHeader>
+				<h2 className="font-semibold text-slate-900">เปลี่ยนรหัสผ่าน</h2>
+			</CardHeader>
+			<CardBody>
+				{msg && (
+					<Alert tone={msg.tone} className="mb-4">
+						{msg.text}
+					</Alert>
+				)}
+				<form className="space-y-4" onSubmit={onSubmit}>
+					<Field label="รหัสผ่านปัจจุบัน" htmlFor="pw-current">
+						<Input
+							id="pw-current"
+							type="password"
+							value={current}
+							onChange={(e) => setCurrent(e.target.value)}
+						/>
+					</Field>
+					<Field label="รหัสผ่านใหม่" htmlFor="pw-new">
+						<Input
+							id="pw-new"
+							type="password"
+							value={next}
+							onChange={(e) => setNext(e.target.value)}
+						/>
+					</Field>
+					<Field label="ยืนยันรหัสผ่านใหม่" htmlFor="pw-confirm">
+						<Input
+							id="pw-confirm"
+							type="password"
+							value={confirm}
+							onChange={(e) => setConfirm(e.target.value)}
+						/>
+					</Field>
+					<Button type="submit" loading={busy} disabled={!current || !next}>
+						เปลี่ยนรหัสผ่าน
+					</Button>
+				</form>
+			</CardBody>
+		</Card>
 	)
 }

@@ -12,7 +12,7 @@ import {
 } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
 import { curriculaQuery, programsQuery } from '~/queries'
 import { deleteCurriculum, saveCurriculum } from '~/server/admin'
@@ -231,6 +231,13 @@ function CurriculaManager() {
 								</div>
 								<div className="flex items-center gap-2">
 									{Number(row.isVisible) !== 1 && <Badge tone="slate">ซ่อน</Badge>}
+									<Link
+										to="/admin/curriculum-group/$curriculumId"
+										params={{ curriculumId: String(row.id) }}
+										className="inline-flex items-center rounded-lg bg-brand-50 px-3 py-1.5 font-medium text-brand-700 text-sm hover:bg-brand-100"
+									>
+										จัดการกลุ่ม
+									</Link>
 									<Button size="sm" variant="secondary" onClick={() => onEdit(row)}>
 										แก้ไข
 									</Button>

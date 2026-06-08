@@ -14,6 +14,24 @@ export const Route = createFileRoute('/subjects/')({
 	component: SubjectsBrowse,
 })
 
+const DAYS = [
+	{ value: 0, label: 'ทุกวัน' },
+	{ value: 1, label: 'จันทร์' },
+	{ value: 2, label: 'อังคาร' },
+	{ value: 3, label: 'พุธ' },
+	{ value: 4, label: 'พฤหัสบดี' },
+	{ value: 5, label: 'ศุกร์' },
+	{ value: 6, label: 'เสาร์' },
+	{ value: 7, label: 'อาทิตย์' },
+]
+
+const RATING_FILTERS = [
+	{ value: 0, label: 'ทุกคะแนน' },
+	{ value: 3, label: '3 ดาวขึ้นไป' },
+	{ value: 4, label: '4 ดาวขึ้นไป' },
+	{ value: 4.5, label: '4.5 ดาวขึ้นไป' },
+]
+
 function SubjectsBrowse() {
 	const search = Route.useSearch()
 	const navigate = Route.useNavigate()
@@ -34,6 +52,13 @@ function SubjectsBrowse() {
 		navigate({ search: (p) => ({ ...p, page }) })
 	}
 
+	const setDay = (day: number) => {
+		navigate({ search: (p) => ({ ...p, day: day || undefined, page: 1 }) })
+	}
+	const setMinRating = (minRating: number) => {
+		navigate({ search: (p) => ({ ...p, minRating: minRating || undefined, page: 1 }) })
+	}
+
 	return (
 		<div className="space-y-6">
 			<div>
@@ -51,10 +76,32 @@ function SubjectsBrowse() {
 				<Button type="submit">ค้นหา</Button>
 			</form>
 
-			<div className="flex items-center gap-3">
+			<div className="flex flex-wrap items-center gap-3">
 				<Button variant={openOnly ? 'primary' : 'secondary'} size="sm" onClick={toggleOpen}>
 					{openOnly ? '✓ ' : ''}เปิดสอนเทอมนี้
 				</Button>
+				<select
+					value={search.day ?? 0}
+					onChange={(e) => setDay(Number(e.target.value))}
+					className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 text-sm shadow-sm"
+				>
+					{DAYS.map((d) => (
+						<option key={d.value} value={d.value}>
+							{d.label}
+						</option>
+					))}
+				</select>
+				<select
+					value={search.minRating ?? 0}
+					onChange={(e) => setMinRating(Number(e.target.value))}
+					className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 text-sm shadow-sm"
+				>
+					{RATING_FILTERS.map((r) => (
+						<option key={r.value} value={r.value}>
+							{r.label}
+						</option>
+					))}
+				</select>
 				<span className="text-slate-500 text-sm">พบ {data.total} วิชา</span>
 			</div>
 

@@ -44,6 +44,10 @@ export const subjectFilterSchema = z.object({
 	isGened: z.coerce.boolean().optional(),
 	// "offered this term" — accept bool or the 'true'/'false' URL string
 	openOnly: z.union([z.boolean(), z.string()]).optional(),
+	// day of week a section is offered (1 = Mon … 7 = Sun)
+	day: z.coerce.number().int().min(1).max(7).optional(),
+	// minimum average review rating
+	minRating: z.coerce.number().min(0).max(5).optional(),
 	page: z.coerce.number().int().min(1).default(1),
 	pageSize: z.coerce.number().int().min(1).max(100).default(10),
 })

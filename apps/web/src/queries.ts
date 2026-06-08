@@ -1,7 +1,15 @@
 import type { SubjectFilter } from '@repo/core/schemas'
 import { queryOptions } from '@tanstack/react-query'
+import { getCurriculumGroupTree } from '~/server/curriculum-group'
 import { listCurricula, listDepartments, listFaculties, listPrograms } from '~/server/hierarchy'
-import { listLatestReviews, listReviewsForSubject } from '~/server/reviews'
+import { getMyCurriculumTree } from '~/server/progress'
+import {
+	getReviewEligibility,
+	listCurriculumReviews,
+	listLatestReviews,
+	listReviews,
+	listReviewsForSubject,
+} from '~/server/reviews'
 import {
 	getSubject,
 	listSectionsForSubject,
@@ -31,10 +39,33 @@ export const subjectSectionsQuery = (id: string) =>
 		queryFn: () => listSectionsForSubject({ data: id }),
 	})
 
+export const reviewEligibilityQuery = (id: string) =>
+	queryOptions({
+		queryKey: ['review-eligibility', id],
+		queryFn: () => getReviewEligibility({ data: id }),
+	})
+
 export const latestReviewsQuery = (limit = 20) =>
 	queryOptions({
 		queryKey: ['latest-reviews', limit],
 		queryFn: () => listLatestReviews({ data: limit }),
+	})
+
+export type ReviewsFeedParams = {
+	search?: string
+	sort?: 'latest' | 'popular' | 'rating'
+	minRating?: number
+}
+export const reviewsFeedQuery = (params: ReviewsFeedParams) =>
+	queryOptions({
+		queryKey: ['reviews-feed', params],
+		queryFn: () => listReviews({ data: params }),
+	})
+
+export const curriculumReviewsQuery = () =>
+	queryOptions({
+		queryKey: ['curriculum-reviews'],
+		queryFn: () => listCurriculumReviews(),
 	})
 
 export const teachtablesQuery = () =>
@@ -63,3 +94,12 @@ export const curriculaQuery = (programId?: number) =>
 
 export const myTranscriptQuery = () =>
 	queryOptions({ queryKey: ['my-transcript'], queryFn: () => getMyTranscript() })
+
+export const myCurriculumTreeQuery = () =>
+	queryOptions({ queryKey: ['my-curriculum-tree'], queryFn: () => getMyCurriculumTree() })
+
+export const curriculumGroupTreeQuery = (curriculumId: number) =>
+	queryOptions({
+		queryKey: ['curriculum-group-tree', curriculumId],
+		queryFn: () => getCurriculumGroupTree({ data: curriculumId }),
+	})

@@ -5,6 +5,7 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./progress": "./src/progress/index.ts",
 		"./schemas": "./src/schemas/index.ts",
 		"./transcript": "./src/transcript/index.ts",
 		"./utils": "./src/utils/index.ts"

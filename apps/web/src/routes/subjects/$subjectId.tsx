@@ -16,10 +16,15 @@ import {
 	Textarea,
 } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
-import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import { subjectQuery, subjectReviewsQuery, subjectSectionsQuery } from '~/queries'
+import {
+	reviewEligibilityQuery,
+	subjectQuery,
+	subjectReviewsQuery,
+	subjectSectionsQuery,
+} from '~/queries'
 import { deleteReview, toggleLike, upsertReview } from '~/server/reviews'
 
 export const Route = createFileRoute('/subjects/$subjectId')({
@@ -68,11 +73,7 @@ function SubjectDetail() {
 
 			<SectionsTable sections={sections} />
 
-			{user ? (
-				<ReviewForm subjectId={subjectId} />
-			) : (
-				<Alert tone="info">เข้าสู่ระบบเพื่อเขียนรีวิวรายวิชานี้</Alert>
-			)}
+			<ReviewGate subjectId={subjectId} signedIn={!!user} />
 
 			<section className="space-y-4">
 				<h2 className="font-semibold text-slate-900 text-lg">รีวิวทั้งหมด ({reviews.length})</h2>
@@ -173,6 +174,29 @@ function SectionsTable({ sections }: { sections: SectionItem[] }) {
 			})}
 		</section>
 	)
+}
+
+/** Gate the write-review form: signed in, has a transcript, and has actually
+ *  completed (passed) this subject. */
+function ReviewGate({ subjectId, signedIn }: { subjectId: string; signedIn: boolean }) {
+	const { data, isPending } = useQuery({
+		...reviewEligibilityQuery(subjectId),
+		enabled: signedIn,
+	})
+
+	if (!signedIn) return <Alert tone="info">เข้าสู่ระบบเพื่อเขียนรีวิวรายวิชานี้</Alert>
+	if (isPending) return null
+	if (!data?.hasTranscript) {
+		return (
+			<Alert tone="info">
+				อัปโหลด transcript ในหน้า "วิชาของฉัน" ก่อน จึงจะเขียนรีวิวได้ (รีวิวได้เฉพาะวิชาที่เรียนผ่านแล้ว)
+			</Alert>
+		)
+	}
+	if (!data.completed) {
+		return <Alert tone="info">รีวิวได้เฉพาะวิชาที่คุณเรียนผ่านแล้วเท่านั้น</Alert>
+	}
+	return <ReviewForm subjectId={subjectId} />
 }
 
 function ReviewForm({ subjectId }: { subjectId: string }) {

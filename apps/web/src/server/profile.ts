@@ -20,6 +20,18 @@ export const updateProfile = createServerFn({ method: 'POST' })
 		return { ok: true }
 	})
 
+export const updateAvatar = createServerFn({ method: 'POST' })
+	.inputValidator((image: string) => image)
+	.handler(async ({ data: image }) => {
+		const { requireUser } = await import('./auth.server')
+		const user = await requireUser()
+		await db
+			.update(schema.user)
+			.set({ image, updatedAt: new Date() })
+			.where(eq(schema.user.id, user.id))
+		return { ok: true }
+	})
+
 export const selectCurriculum = createServerFn({ method: 'POST' })
 	.inputValidator(selectCurriculumSchema)
 	.handler(async ({ data }) => {

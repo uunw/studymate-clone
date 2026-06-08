@@ -26,7 +26,15 @@ export const listSubjects = createServerFn({ method: 'GET' })
 		const openCond = openOnly
 			? sql`EXISTS (SELECT 1 FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId})`
 			: undefined
-		const where = and(qCond, openCond)
+		// Day-of-week (any offering) and min-rating as correlated subqueries so
+		// they also constrain the total count (which has no GROUP BY).
+		const dayCond = data.day
+			? sql`EXISTS (SELECT 1 FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.day = ${data.day})`
+			: undefined
+		const ratingCond = data.minRating
+			? sql`(SELECT COALESCE(AVG(sr.rating), 0) FROM ${schema.subjectReview} sr WHERE sr.subject_id = ${schema.subject.id}) >= ${data.minRating}`
+			: undefined
+		const where = and(qCond, openCond, dayCond, ratingCond)
 
 		const openSections = sql<number>`(SELECT count(*)::int FROM ${schema.subjectClass} sc WHERE sc.subject_id = ${schema.subject.id} AND sc.teachtable_id = ${ttId})`
 

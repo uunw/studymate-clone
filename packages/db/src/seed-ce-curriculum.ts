@@ -585,14 +585,14 @@ async function main() {
 			(await db.insert(schema.curriculumGroup).values(v).returning())[0]!.id
 		const root = await g({
 			parentId: null,
-			type: 'root',
+			type: 'COLLECTIVE',
 			name: 'หลักสูตร วศ.บ. วิศวกรรมคอมพิวเตอร์ (ต่อเนื่อง) ปป.64',
 			credit: 114,
 			color: '#2563eb',
 		})
 		const gen = await g({
 			parentId: root,
-			type: 'category',
+			type: 'COLLECTIVE',
 			name: 'หมวดวิชาศึกษาทั่วไป',
 			credit: 30,
 			color: '#0891b2',
@@ -603,26 +603,31 @@ async function main() {
 			['วิชาตามเกณฑ์ของคณะ', 9],
 			['วิชาเลือก', 6],
 		] as const)
-			await g({ parentId: gen, type: 'subgroup', name, credit })
+			await g({ parentId: gen, type: 'REQUIRED_CREDIT', name, credit })
 		const major = await g({
 			parentId: root,
-			type: 'category',
+			type: 'COLLECTIVE',
 			name: 'หมวดวิชาเฉพาะ',
 			credit: 78,
 			color: '#2563eb',
 		})
-		await g({ parentId: major, type: 'subgroup', name: 'กลุ่มวิชาวิศวกรรมพื้นฐาน', credit: 8 })
-		await g({ parentId: major, type: 'subgroup', name: 'กลุ่มวิชาวิศวกรรมคอมพิวเตอร์พื้นฐาน', credit: 58 })
+		await g({ parentId: major, type: 'REQUIRED_CREDIT', name: 'กลุ่มวิชาวิศวกรรมพื้นฐาน', credit: 8 })
+		await g({
+			parentId: major,
+			type: 'REQUIRED_CREDIT',
+			name: 'กลุ่มวิชาวิศวกรรมคอมพิวเตอร์พื้นฐาน',
+			credit: 58,
+		})
 		const elec = await g({
 			parentId: major,
-			type: 'subgroup',
+			type: 'REQUIRED_CREDIT',
 			name: 'กลุ่มวิชาเลือกเฉพาะสาขา',
 			credit: 12,
 		})
-		for (const e of ELECTIVES) await g({ parentId: elec, type: 'elective', name: e.name })
+		for (const e of ELECTIVES) await g({ parentId: elec, type: 'COLLECTIVE', name: e.name })
 		await g({
 			parentId: root,
-			type: 'category',
+			type: 'FREE',
 			name: 'หมวดวิชาเลือกเสรี',
 			credit: 6,
 			color: '#64748b',
@@ -635,6 +640,23 @@ async function main() {
 			nameEn: 'Bachelor of Engineering in Computer Engineering (Continuing)',
 		})
 	}
+
+	// 2b. Normalize legacy group types (root/category/subgroup/elective) from
+	// earlier seeds to the progress-allocation enum. Idempotent: a fresh seed
+	// already uses the enum, so these updates no-op. The FREE-by-name update runs
+	// first so the free-elective category isn't swept into COLLECTIVE.
+	await db
+		.update(schema.curriculumGroup)
+		.set({ type: 'FREE' })
+		.where(eq(schema.curriculumGroup.name, 'หมวดวิชาเลือกเสรี'))
+	await db
+		.update(schema.curriculumGroup)
+		.set({ type: 'COLLECTIVE' })
+		.where(inArray(schema.curriculumGroup.type, ['root', 'category', 'elective']))
+	await db
+		.update(schema.curriculumGroup)
+		.set({ type: 'REQUIRED_CREDIT' })
+		.where(eq(schema.curriculumGroup.type, 'subgroup'))
 
 	// 3. group↔subject links — resolve group ids by name, add any that are missing.
 	const names = [...new Set(SUBJECTS.map((s) => GROUP_NAME[s.group]!))]
