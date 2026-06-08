@@ -100,6 +100,54 @@ type SectionItem = Awaited<
 	ReturnType<NonNullable<ReturnType<typeof subjectSectionsQuery>['queryFn']>>
 >[number]
 
+/** Compact "year × term offered" grid, so a student sees when this subject runs. */
+function AvailabilityMatrix({ sections }: { sections: SectionItem[] }) {
+	const offered = new Set(sections.map((s) => `${s.year}-${s.term}`))
+	const years = [
+		...new Set(sections.map((s) => s.year).filter((y): y is number => y != null)),
+	].sort((a, b) => b - a)
+	const terms = [1, 2, 3]
+	if (!years.length) return null
+
+	return (
+		<Card>
+			<CardHeader>
+				<h3 className="font-medium text-slate-800 text-sm">ภาคเรียนที่เคยเปิดสอน</h3>
+			</CardHeader>
+			<CardBody className="overflow-x-auto p-0">
+				<table className="w-full text-center text-sm">
+					<thead className="border-slate-100 border-b text-slate-500 text-xs">
+						<tr>
+							<th className="px-4 py-2 text-left">ปีการศึกษา</th>
+							{terms.map((t) => (
+								<th key={t} className="px-4 py-2">
+									เทอม {t}
+								</th>
+							))}
+						</tr>
+					</thead>
+					<tbody>
+						{years.map((y) => (
+							<tr key={y} className="border-slate-50 border-b last:border-0">
+								<td className="px-4 py-2 text-left font-medium text-slate-700">{y}</td>
+								{terms.map((t) => (
+									<td key={t} className="px-4 py-2">
+										{offered.has(`${y}-${t}`) ? (
+											<span className="font-medium text-green-600">✓</span>
+										) : (
+											<span className="text-slate-200">–</span>
+										)}
+									</td>
+								))}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</CardBody>
+		</Card>
+	)
+}
+
 function SectionsTable({ sections }: { sections: SectionItem[] }) {
 	if (!sections.length) {
 		return (
@@ -121,6 +169,7 @@ function SectionsTable({ sections }: { sections: SectionItem[] }) {
 	return (
 		<section className="space-y-4">
 			<h2 className="font-semibold text-slate-900 text-lg">ตารางสอน ({sections.length} sec)</h2>
+			<AvailabilityMatrix sections={sections} />
 			{[...byTerm.entries()].map(([key, secs]) => {
 				const head = secs[0]
 				return (
