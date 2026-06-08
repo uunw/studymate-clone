@@ -1,4 +1,15 @@
-import { date, integer, pgTable, real, serial, text, timestamp, varchar } from 'drizzle-orm/pg-core'
+import {
+	boolean,
+	date,
+	integer,
+	pgTable,
+	real,
+	serial,
+	text,
+	timestamp,
+	unique,
+	varchar,
+} from 'drizzle-orm/pg-core'
 import { user } from './auth'
 
 /**
@@ -9,31 +20,45 @@ import { user } from './auth'
 
 // ---- Organizational hierarchy ----
 
-export const faculty = pgTable('faculty', {
-	id: serial('id').primaryKey(),
-	kmitlId: varchar('kmitl_id', { length: 64 }),
-	nameTh: varchar('name_th', { length: 256 }),
-	nameEn: varchar('name_en', { length: 256 }),
-	isVisible: integer('is_visible').default(1).notNull(),
-})
+export const faculty = pgTable(
+	'faculty',
+	{
+		id: serial('id').primaryKey(),
+		kmitlId: varchar('kmitl_id', { length: 64 }),
+		nameTh: varchar('name_th', { length: 256 }),
+		nameEn: varchar('name_en', { length: 256 }),
+		isVisible: integer('is_visible').default(1).notNull(),
+	},
+	(t) => [unique('faculty_kmitl_uq').on(t.kmitlId)],
+)
 
-export const department = pgTable('department', {
-	id: serial('id').primaryKey(),
-	facultyId: integer('faculty_id').references(() => faculty.id, { onDelete: 'set null' }),
-	kmitlId: varchar('kmitl_id', { length: 64 }),
-	nameTh: varchar('name_th', { length: 256 }),
-	nameEn: varchar('name_en', { length: 256 }),
-	isVisible: integer('is_visible').default(1).notNull(),
-})
+export const department = pgTable(
+	'department',
+	{
+		id: serial('id').primaryKey(),
+		facultyId: integer('faculty_id').references(() => faculty.id, { onDelete: 'set null' }),
+		kmitlId: varchar('kmitl_id', { length: 64 }),
+		nameTh: varchar('name_th', { length: 256 }),
+		nameEn: varchar('name_en', { length: 256 }),
+		isVisible: integer('is_visible').default(1).notNull(),
+	},
+	(t) => [unique('department_fac_kmitl_uq').on(t.facultyId, t.kmitlId)],
+)
 
-export const program = pgTable('program', {
-	id: serial('id').primaryKey(),
-	departmentId: integer('department_id').references(() => department.id, { onDelete: 'set null' }),
-	kmitlId: varchar('kmitl_id', { length: 64 }),
-	nameTh: varchar('name_th', { length: 256 }),
-	nameEn: varchar('name_en', { length: 256 }),
-	isVisible: integer('is_visible').default(1).notNull(),
-})
+export const program = pgTable(
+	'program',
+	{
+		id: serial('id').primaryKey(),
+		departmentId: integer('department_id').references(() => department.id, {
+			onDelete: 'set null',
+		}),
+		kmitlId: varchar('kmitl_id', { length: 64 }),
+		nameTh: varchar('name_th', { length: 256 }),
+		nameEn: varchar('name_en', { length: 256 }),
+		isVisible: integer('is_visible').default(1).notNull(),
+	},
+	(t) => [unique('program_dept_kmitl_uq').on(t.departmentId, t.kmitlId)],
+)
 
 // ---- Curriculum structure ----
 
@@ -78,10 +103,37 @@ export const curriculumGroupSubject = pgTable('curriculum_group_subject', {
 
 // ---- Academic year / term ----
 
-export const teachtable = pgTable('teachtable', {
-	id: serial('id').primaryKey(),
-	year: integer('year').notNull(),
-	term: integer('term').notNull(),
+export const teachtable = pgTable(
+	'teachtable',
+	{
+		id: serial('id').primaryKey(),
+		year: integer('year').notNull(),
+		term: integer('term').notNull(),
+	},
+	(t) => [unique('teachtable_year_term_uq').on(t.year, t.term)],
+)
+
+// ---- Subject offerings / sections (from the KMITL registrar teach-table API) ----
+
+export const subjectClass = pgTable('subject_class', {
+	id: varchar('id', { length: 32 }).primaryKey(), // registrar teach_table_id
+	subjectId: varchar('subject_id', { length: 16 }).references(() => subject.id, {
+		onDelete: 'cascade',
+	}),
+	teachtableId: integer('teachtable_id').references(() => teachtable.id, { onDelete: 'set null' }),
+	programId: integer('program_id').references(() => program.id, { onDelete: 'set null' }),
+	section: varchar('section', { length: 16 }),
+	lectOrPrac: varchar('lect_or_prac', { length: 8 }),
+	day: integer('day'),
+	timeStart: varchar('time_start', { length: 8 }),
+	timeEnd: varchar('time_end', { length: 8 }),
+	room: varchar('room', { length: 64 }),
+	building: varchar('building', { length: 64 }),
+	teacherTh: text('teacher_th'),
+	teacherEn: text('teacher_en'),
+	capacity: integer('capacity'),
+	enrolled: integer('enrolled'),
+	closed: boolean('closed').default(false),
 })
 
 // ---- Reviews ----

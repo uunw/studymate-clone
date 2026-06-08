@@ -7,6 +7,7 @@ import {
 	faculty,
 	program,
 	subject,
+	subjectClass,
 	subjectReview,
 	subjectReviewLike,
 	teachtable,
@@ -41,6 +42,16 @@ export const curriculumRelations = relations(curriculum, ({ one }) => ({
 export const subjectRelations = relations(subject, ({ many }) => ({
 	reviews: many(subjectReview),
 	groups: many(curriculumGroupSubject),
+	classes: many(subjectClass),
+}))
+
+export const subjectClassRelations = relations(subjectClass, ({ one }) => ({
+	subject: one(subject, { fields: [subjectClass.subjectId], references: [subject.id] }),
+	teachtable: one(teachtable, {
+		fields: [subjectClass.teachtableId],
+		references: [teachtable.id],
+	}),
+	program: one(program, { fields: [subjectClass.programId], references: [program.id] }),
 }))
 
 export const curriculumGroupSubjectRelations = relations(curriculumGroupSubject, ({ one }) => ({
