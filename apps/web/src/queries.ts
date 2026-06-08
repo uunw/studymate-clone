@@ -2,7 +2,12 @@ import type { SubjectFilter } from '@repo/core/schemas'
 import { queryOptions } from '@tanstack/react-query'
 import { listCurricula, listDepartments, listFaculties, listPrograms } from '~/server/hierarchy'
 import { listLatestReviews, listReviewsForSubject } from '~/server/reviews'
-import { getSubject, listSubjects, listTeachtables } from '~/server/subjects'
+import {
+	getSubject,
+	listSectionsForSubject,
+	listSubjects,
+	listTeachtables,
+} from '~/server/subjects'
 import { getMyTranscript } from '~/server/transcript'
 
 export const subjectsQuery = (filter: SubjectFilter) =>
@@ -18,6 +23,12 @@ export const subjectReviewsQuery = (id: string) =>
 	queryOptions({
 		queryKey: ['subject-reviews', id],
 		queryFn: () => listReviewsForSubject({ data: id }),
+	})
+
+export const subjectSectionsQuery = (id: string) =>
+	queryOptions({
+		queryKey: ['subject-sections', id],
+		queryFn: () => listSectionsForSubject({ data: id }),
 	})
 
 export const latestReviewsQuery = (limit = 20) =>

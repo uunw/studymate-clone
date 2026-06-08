@@ -1,6 +1,6 @@
 import { subjectFilterSchema } from '@repo/core/schemas'
 import { pageBounds } from '@repo/core/utils'
-import { avg, count, db, desc, eq, schema, sql } from '@repo/db'
+import { asc, avg, count, db, desc, eq, schema, sql } from '@repo/db'
 import { createServerFn } from '@tanstack/react-start'
 
 /** Paginated subject list with average rating + review count. */
@@ -79,3 +79,34 @@ export const listTeachtables = createServerFn({ method: 'GET' }).handler(async (
 		.from(schema.teachtable)
 		.orderBy(desc(schema.teachtable.year), desc(schema.teachtable.term))
 })
+
+/** Teach-table sections (offerings) for a subject, newest term first. */
+export const listSectionsForSubject = createServerFn({ method: 'GET' })
+	.inputValidator((subjectId: string) => subjectId)
+	.handler(async ({ data: subjectId }) => {
+		return db
+			.select({
+				id: schema.subjectClass.id,
+				section: schema.subjectClass.section,
+				lectOrPrac: schema.subjectClass.lectOrPrac,
+				day: schema.subjectClass.day,
+				timeStart: schema.subjectClass.timeStart,
+				timeEnd: schema.subjectClass.timeEnd,
+				room: schema.subjectClass.room,
+				building: schema.subjectClass.building,
+				teacherTh: schema.subjectClass.teacherTh,
+				capacity: schema.subjectClass.capacity,
+				enrolled: schema.subjectClass.enrolled,
+				closed: schema.subjectClass.closed,
+				year: schema.teachtable.year,
+				term: schema.teachtable.term,
+			})
+			.from(schema.subjectClass)
+			.leftJoin(schema.teachtable, eq(schema.teachtable.id, schema.subjectClass.teachtableId))
+			.where(eq(schema.subjectClass.subjectId, subjectId))
+			.orderBy(
+				desc(schema.teachtable.year),
+				desc(schema.teachtable.term),
+				asc(schema.subjectClass.section),
+			)
+	})

@@ -19,7 +19,7 @@ import { useForm } from '@tanstack/react-form'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import { subjectQuery, subjectReviewsQuery } from '~/queries'
+import { subjectQuery, subjectReviewsQuery, subjectSectionsQuery } from '~/queries'
 import { deleteReview, toggleLike, upsertReview } from '~/server/reviews'
 
 export const Route = createFileRoute('/subjects/$subjectId')({
@@ -27,16 +27,22 @@ export const Route = createFileRoute('/subjects/$subjectId')({
 		await Promise.all([
 			context.queryClient.ensureQueryData(subjectQuery(params.subjectId)),
 			context.queryClient.ensureQueryData(subjectReviewsQuery(params.subjectId)),
+			context.queryClient.ensureQueryData(subjectSectionsQuery(params.subjectId)),
 		])
 	},
 	component: SubjectDetail,
 })
+
+const DAYS_TH = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+const dayTh = (d: number | null) => (d && DAYS_TH[d]) || '-'
+const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '')
 
 function SubjectDetail() {
 	const { subjectId } = Route.useParams()
 	const { user } = Route.useRouteContext()
 	const { data: subject } = useSuspenseQuery(subjectQuery(subjectId))
 	const { data: reviews } = useSuspenseQuery(subjectReviewsQuery(subjectId))
+	const { data: sections } = useSuspenseQuery(subjectSectionsQuery(subjectId))
 
 	return (
 		<div className="space-y-8">
@@ -59,6 +65,8 @@ function SubjectDetail() {
 					{subject.detail && <p className="text-slate-600 text-sm">{subject.detail}</p>}
 				</CardBody>
 			</Card>
+
+			<SectionsTable sections={sections} />
 
 			{user ? (
 				<ReviewForm subjectId={subjectId} />
@@ -84,6 +92,86 @@ function SubjectDetail() {
 				)}
 			</section>
 		</div>
+	)
+}
+
+type SectionItem = Awaited<
+	ReturnType<NonNullable<ReturnType<typeof subjectSectionsQuery>['queryFn']>>
+>[number]
+
+function SectionsTable({ sections }: { sections: SectionItem[] }) {
+	if (!sections.length) {
+		return (
+			<section className="space-y-4">
+				<h2 className="font-semibold text-slate-900 text-lg">ตารางสอน</h2>
+				<EmptyState title="ยังไม่มีตารางสอน" description="ไม่พบ section ที่เปิดสอนของรายวิชานี้" />
+			</section>
+		)
+	}
+
+	const byTerm = new Map<string, SectionItem[]>()
+	for (const s of sections) {
+		const key = `${s.year}/${s.term}`
+		const list = byTerm.get(key)
+		if (list) list.push(s)
+		else byTerm.set(key, [s])
+	}
+
+	return (
+		<section className="space-y-4">
+			<h2 className="font-semibold text-slate-900 text-lg">ตารางสอน ({sections.length} sec)</h2>
+			{[...byTerm.entries()].map(([key, secs]) => {
+				const head = secs[0]
+				return (
+					<Card key={key}>
+						<CardHeader>
+							<h3 className="font-medium text-slate-800">
+								{head?.year && head.term ? formatTerm(head.year, head.term) : 'ภาคเรียน'}
+							</h3>
+						</CardHeader>
+						<CardBody className="overflow-x-auto p-0">
+							<table className="w-full text-left text-sm">
+								<thead className="border-slate-100 border-b text-slate-500 text-xs">
+									<tr>
+										<th className="px-4 py-2">Sec</th>
+										<th className="px-4 py-2">วัน-เวลา</th>
+										<th className="px-4 py-2">ห้อง</th>
+										<th className="px-4 py-2">ผู้สอน</th>
+										<th className="px-4 py-2 text-right">ที่นั่ง</th>
+										<th className="px-4 py-2">สถานะ</th>
+									</tr>
+								</thead>
+								<tbody>
+									{secs.map((s) => (
+										<tr key={s.id} className="border-slate-50 border-b last:border-0">
+											<td className="px-4 py-2 font-medium">
+												{s.section}
+												{s.lectOrPrac ? (
+													<span className="ml-1 text-slate-400">({s.lectOrPrac})</span>
+												) : null}
+											</td>
+											<td className="px-4 py-2 whitespace-nowrap text-slate-600">
+												{dayTh(s.day)} {hhmm(s.timeStart)}
+												{s.timeEnd ? `-${hhmm(s.timeEnd)}` : ''}
+											</td>
+											<td className="px-4 py-2 text-slate-600">{s.room ?? '-'}</td>
+											<td className="px-4 py-2 text-slate-600">{s.teacherTh ?? '-'}</td>
+											<td className="px-4 py-2 text-right text-slate-600">
+												{s.enrolled ?? 0}
+												{s.capacity ? `/${s.capacity}` : ''}
+											</td>
+											<td className="px-4 py-2">
+												<Badge tone={s.closed ? 'red' : 'green'}>{s.closed ? 'ปิด' : 'เปิด'}</Badge>
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</CardBody>
+					</Card>
+				)
+			})}
+		</section>
 	)
 }
 
