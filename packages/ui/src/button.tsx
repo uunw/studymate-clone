@@ -10,9 +10,11 @@ const VARIANTS: Record<Variant, string> = {
 	ghost: 'bg-transparent text-slate-700 hover:bg-slate-100 focus-visible:outline-slate-400',
 	danger: 'bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600',
 }
+// md is the default and sized to a 44px touch target (mobile-first); sm stays
+// compact for dense desktop contexts.
 const SIZES: Record<Size, string> = {
-	sm: 'h-8 px-3 text-sm',
-	md: 'h-10 px-4 text-sm',
+	sm: 'h-9 px-3.5 text-sm',
+	md: 'h-11 px-4 text-sm',
 	lg: 'h-12 px-6 text-base',
 }
 

@@ -88,7 +88,7 @@ function TranscriptView({
 						<p className="text-slate-500 text-sm">เกรดเฉลี่ยสะสม (GPAX)</p>
 						<p className="font-bold text-3xl text-brand-700">{finalGpa.toFixed(2)}</p>
 					</div>
-					<div className="text-right text-slate-400 text-xs">
+					<div className="text-right text-slate-500 text-xs">
 						<p>
 							{details.length} รายวิชา · {totalCredit} หน่วยกิตสะสม
 						</p>
@@ -115,7 +115,7 @@ function TranscriptView({
 							<h2 className="font-semibold text-slate-900">
 								{g.year == null ? 'หน่วยกิตเทียบโอน' : `ปีการศึกษา ${g.year} · ภาคเรียนที่ ${g.term}`}
 							</h2>
-							{g.year == null && <p className="text-slate-400 text-xs">Transfer Credit</p>}
+							{g.year == null && <p className="text-slate-500 text-xs">Transfer Credit</p>}
 						</CardHeader>
 						<CardBody className="divide-y divide-slate-50 p-0">
 							{g.items.map((d) => (
@@ -125,7 +125,7 @@ function TranscriptView({
 											{d.subjectId} {d.nameTh ?? d.nameEn ?? ''}
 										</p>
 										{d.nameTh && d.nameEn && (
-											<p className="truncate text-slate-400 text-xs">{d.nameEn}</p>
+											<p className="truncate text-slate-500 text-xs">{d.nameEn}</p>
 										)}
 									</div>
 									<span className="shrink-0 text-slate-500 text-sm">{d.credit ?? '-'} นก.</span>

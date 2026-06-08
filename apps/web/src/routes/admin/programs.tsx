@@ -9,6 +9,7 @@ import {
 	EmptyState,
 	Field,
 	Input,
+	Select,
 } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
@@ -110,9 +111,9 @@ function ProgramsManager() {
 									htmlFor={field.name}
 									error={field.state.meta.errors[0]?.message}
 								>
-									<select
+									<Select
 										id={field.name}
-										className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+										className="w-full"
 										value={field.state.value}
 										onBlur={field.handleBlur}
 										onChange={(e) => field.handleChange(Number(e.target.value))}
@@ -125,7 +126,7 @@ function ProgramsManager() {
 												{d.nameTh}
 											</option>
 										))}
-									</select>
+									</Select>
 								</Field>
 							)}
 						</form.Field>

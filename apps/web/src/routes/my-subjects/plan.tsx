@@ -46,7 +46,7 @@ function PlanTab() {
 								<p className="text-slate-500 text-sm">หน่วยกิตแนะนำ (ยังไม่ได้ลง)</p>
 								<p className="font-bold text-3xl text-brand-700">{data.totalCredit}</p>
 							</div>
-							<p className="max-w-[14rem] text-right text-slate-400 text-xs">
+							<p className="max-w-[14rem] text-right text-slate-500 text-xs">
 								{data.items.length} วิชาแนะนำ · เพดานลงทะเบียนปกติ ~22–27 นก./เทอม
 							</p>
 						</CardBody>
@@ -65,7 +65,7 @@ function PlanTab() {
 										>
 											{it.subjectId} {it.nameTh ?? it.nameEn ?? ''}
 										</Link>
-										<div className="mt-0.5 flex flex-wrap items-center gap-2 text-slate-400 text-xs">
+										<div className="mt-0.5 flex flex-wrap items-center gap-2 text-slate-500 text-xs">
 											{it.section && <span>sec {it.section}</span>}
 											{it.groupName && (
 												<>

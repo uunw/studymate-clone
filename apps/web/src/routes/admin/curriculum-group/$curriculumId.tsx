@@ -8,6 +8,7 @@ import {
 	EmptyState,
 	Field,
 	Input,
+	Select,
 	Textarea,
 } from '@repo/ui'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
@@ -169,9 +170,9 @@ function GroupRow({
 				)}
 				<span className="font-medium text-slate-800 text-sm">{node.name}</span>
 				<Badge tone="brand">{TYPE_LABELS[node.type as GroupType] ?? node.type}</Badge>
-				{node.credit != null && <span className="text-slate-400 text-xs">{node.credit} นก.</span>}
+				{node.credit != null && <span className="text-slate-500 text-xs">{node.credit} นก.</span>}
 				{node.subjects.length > 0 && (
-					<span className="text-slate-400 text-xs">· {node.subjects.length} วิชา</span>
+					<span className="text-slate-500 text-xs">· {node.subjects.length} วิชา</span>
 				)}
 				<div className="ml-auto flex gap-1">
 					<Button size="sm" variant="ghost" onClick={() => onAddChild(node.id)}>
@@ -259,9 +260,9 @@ function NodeEditor({
 				{err && <Alert tone="error">{err}</Alert>}
 				<form className="space-y-4" onSubmit={onSubmit}>
 					<Field label="ประเภทกลุ่ม" htmlFor="group-type">
-						<select
+						<Select
 							id="group-type"
-							className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+							className="w-full"
 							value={type}
 							onChange={(e) => setType(e.target.value as GroupType)}
 						>
@@ -270,7 +271,7 @@ function NodeEditor({
 									{TYPE_LABELS[t]} ({t})
 								</option>
 							))}
-						</select>
+						</Select>
 					</Field>
 					<Field label="ชื่อกลุ่ม" htmlFor="group-name">
 						<Input id="group-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -376,7 +377,7 @@ function SubjectPanel({
 				{result && <Alert tone={result.tone}>{result.message}</Alert>}
 
 				{group.subjects.length === 0 ? (
-					<p className="text-slate-400 text-sm">ยังไม่มีวิชาในกลุ่มนี้</p>
+					<p className="text-slate-500 text-sm">ยังไม่มีวิชาในกลุ่มนี้</p>
 				) : (
 					<ul className="divide-y divide-slate-50">
 						{group.subjects.map((s) => (
@@ -386,7 +387,7 @@ function SubjectPanel({
 										{s.id} {s.nameTh ?? s.nameEn ?? ''}
 									</p>
 								</div>
-								<span className="shrink-0 text-slate-400 text-xs">{s.credit ?? '-'} นก.</span>
+								<span className="shrink-0 text-slate-500 text-xs">{s.credit ?? '-'} นก.</span>
 								<Button size="sm" variant="ghost" onClick={() => onRemove(s.id)}>
 									ลบ
 								</Button>

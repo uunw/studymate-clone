@@ -1,4 +1,4 @@
-import { Button, Card, CardBody, Field, Modal } from '@repo/ui'
+import { Button, Card, CardBody, Field, Modal, Select } from '@repo/ui'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
@@ -79,22 +79,22 @@ function CurriculumGate() {
 					เลือกหลักสูตรเพื่อเริ่มใช้งานการติดตามความก้าวหน้าและรีวิวตามหลักสูตรของคุณ
 				</p>
 				<Field label="หลักสูตร" htmlFor="gate-curriculum">
-					<select
+					<Select
 						id="gate-curriculum"
+						className="w-full"
 						disabled={busy}
 						defaultValue=""
 						onChange={(e) => choose(e.target.value)}
-						className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
 					>
 						<option value="" disabled>
-							— เลือกหลักสูตร —
+							เลือกหลักสูตร
 						</option>
 						{(curricula ?? []).map((c) => (
 							<option key={c.id} value={c.id}>
 								{c.nameTh} ({c.year})
 							</option>
 						))}
-					</select>
+					</Select>
 				</Field>
 			</div>
 		</Modal>

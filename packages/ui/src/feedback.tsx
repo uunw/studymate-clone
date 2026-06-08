@@ -15,7 +15,12 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-	return <div className={cn('animate-pulse rounded-md bg-slate-200', className)} {...props} />
+	return (
+		<div
+			className={cn('animate-pulse rounded-md bg-slate-200 motion-reduce:animate-none', className)}
+			{...props}
+		/>
+	)
 }
 
 type AlertTone = 'info' | 'success' | 'error'

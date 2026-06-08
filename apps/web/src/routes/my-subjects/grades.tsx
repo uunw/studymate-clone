@@ -1,5 +1,5 @@
 import { termGpa } from '@repo/core/progress'
-import { Button, Card, CardBody, CardHeader } from '@repo/ui'
+import { Button, Card, CardBody, CardHeader, Select } from '@repo/ui'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
@@ -81,7 +81,7 @@ function GradeTracker({ details }: { details: Detail[] }) {
 							{t.year == null ? 'หน่วยกิตเทียบโอน' : `ปีการศึกษา ${t.year} · ภาคเรียนที่ ${t.term}`}
 						</h2>
 						{t.year != null && (
-							<span className="text-slate-400 text-xs">
+							<span className="text-slate-500 text-xs">
 								GPS {t.gps.toFixed(2)} · GPA {t.gpa.toFixed(2)}
 							</span>
 						)}
@@ -94,11 +94,12 @@ function GradeTracker({ details }: { details: Detail[] }) {
 										{d.subjectId} {d.nameTh ?? d.nameEn ?? ''}
 									</p>
 								</div>
-								<span className="shrink-0 text-slate-400 text-xs">{d.credit ?? '-'} นก.</span>
-								<select
+								<span className="shrink-0 text-slate-500 text-xs">{d.credit ?? '-'} นก.</span>
+								<Select
+									aria-label={`แก้ไขเกรด ${d.subjectId}`}
+									className="h-9 shrink-0"
 									value={d.grade ?? ''}
 									onChange={(e) => setGrade(d.id, e.target.value)}
-									className="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-sm"
 								>
 									{!d.grade && <option value="">-</option>}
 									{GRADE_OPTIONS.map((g) => (
@@ -106,7 +107,7 @@ function GradeTracker({ details }: { details: Detail[] }) {
 											{g}
 										</option>
 									))}
-								</select>
+								</Select>
 							</div>
 						))}
 					</CardBody>

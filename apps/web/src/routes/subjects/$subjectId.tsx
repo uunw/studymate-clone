@@ -13,6 +13,7 @@ import {
 	Label,
 	RatingInput,
 	RatingStars,
+	Select,
 	Textarea,
 } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
@@ -198,7 +199,7 @@ function SectionsTable({ sections }: { sections: SectionItem[] }) {
 											<td className="px-4 py-2 font-medium">
 												{s.section}
 												{s.lectOrPrac ? (
-													<span className="ml-1 text-slate-400">({s.lectOrPrac})</span>
+													<span className="ml-1 text-slate-500">({s.lectOrPrac})</span>
 												) : null}
 											</td>
 											<td className="px-4 py-2 whitespace-nowrap text-slate-600">
@@ -326,9 +327,9 @@ function ReviewForm({ subjectId }: { subjectId: string }) {
 									htmlFor={field.name}
 									error={field.state.meta.errors[0]?.message}
 								>
-									<select
+									<Select
 										id={field.name}
-										className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+										className="w-full"
 										value={field.state.value}
 										onBlur={field.handleBlur}
 										onChange={(e) => field.handleChange(Number(e.target.value))}
@@ -336,7 +337,7 @@ function ReviewForm({ subjectId }: { subjectId: string }) {
 										<option value={1}>1</option>
 										<option value={2}>2</option>
 										<option value={3}>3</option>
-									</select>
+									</Select>
 								</Field>
 							)}
 						</form.Field>

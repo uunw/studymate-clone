@@ -25,7 +25,11 @@ function AdminDashboard() {
 			</div>
 			<div className="grid gap-4 sm:grid-cols-2">
 				{MANAGERS.map((m) => (
-					<Link key={m.to} to={m.to} className="block transition-transform hover:-translate-y-0.5">
+					<Link
+						key={m.to}
+						to={m.to}
+						className="block transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+					>
 						<Card className="h-full">
 							<CardHeader>
 								<h2 className="font-semibold text-slate-900">{m.title}</h2>

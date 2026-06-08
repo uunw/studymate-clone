@@ -83,6 +83,7 @@ function MySubjectsLayout() {
 							<input
 								type="file"
 								accept="application/pdf"
+								aria-label="เลือกไฟล์ transcript (PDF)"
 								onChange={(e) => setFile(e.target.files?.[0] ?? null)}
 								className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700 file:text-sm hover:file:bg-brand-100"
 							/>

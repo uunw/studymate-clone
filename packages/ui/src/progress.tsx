@@ -28,10 +28,16 @@ export function ProgressBar({
 	const sec = Math.max(0, Math.min(100 - pct, secondaryPercent))
 	return (
 		<div className={cn('flex h-2 w-full overflow-hidden rounded-full bg-slate-100', className)}>
-			<div className={cn('h-full transition-all', TONES[tone])} style={{ width: `${pct}%` }} />
+			<div
+				className={cn('h-full transition-all motion-reduce:transition-none', TONES[tone])}
+				style={{ width: `${pct}%` }}
+			/>
 			{sec > 0 && (
 				<div
-					className={cn('h-full transition-all', TONES[secondaryTone])}
+					className={cn(
+						'h-full transition-all motion-reduce:transition-none',
+						TONES[secondaryTone],
+					)}
 					style={{ width: `${sec}%` }}
 				/>
 			)}

@@ -7,6 +7,7 @@ import {
 	EmptyState,
 	Input,
 	RatingStars,
+	Select,
 	Spinner,
 	Tabs,
 } from '@repo/ui'
@@ -89,34 +90,35 @@ function Reviews() {
 							value={searchInput}
 							onChange={(e) => setSearchInput(e.target.value)}
 							placeholder="ค้นหาด้วยชื่อวิชา หรือรหัสวิชา"
+							aria-label="ค้นหารีวิว"
 							inputMode="search"
 						/>
 						<Button type="submit" size="sm">
 							ค้นหา
 						</Button>
 					</form>
-					<select
+					<Select
+						aria-label="เรียงลำดับรีวิว"
 						value={sort}
 						onChange={(e) => setSort(e.target.value as typeof sort)}
-						className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm"
 					>
 						{SORTS.map((s) => (
 							<option key={s.value} value={s.value}>
 								{s.label}
 							</option>
 						))}
-					</select>
-					<select
+					</Select>
+					<Select
+						aria-label="กรองตามคะแนน"
 						value={minRating}
 						onChange={(e) => setMinRating(Number(e.target.value))}
-						className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 text-sm shadow-sm"
 					>
 						{RATINGS.map((r) => (
 							<option key={r.value} value={r.value}>
 								{r.label}
 							</option>
 						))}
-					</select>
+					</Select>
 				</div>
 			)}
 
@@ -177,7 +179,7 @@ function ReviewCard({ review: r }: { review: FeedItem }) {
 
 				<p className="whitespace-pre-line text-slate-700 text-sm">{r.review}</p>
 
-				<div className="flex flex-wrap items-center gap-3 text-slate-400 text-xs">
+				<div className="flex flex-wrap items-center gap-3 text-slate-500 text-xs">
 					<span>โดย {r.authorNickname}</span>
 					<span>·</span>
 					<span>{r.createdAt ? formatThaiDate(new Date(r.createdAt)) : ''}</span>

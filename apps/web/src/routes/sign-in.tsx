@@ -109,7 +109,7 @@ function SignIn() {
 						</form.Subscribe>
 					</form>
 
-					<div className="flex items-center gap-3 text-slate-400 text-xs">
+					<div className="flex items-center gap-3 text-slate-500 text-xs">
 						<span className="h-px flex-1 bg-slate-200" />
 						หรือ
 						<span className="h-px flex-1 bg-slate-200" />

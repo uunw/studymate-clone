@@ -1,5 +1,5 @@
 import { subjectFilterSchema } from '@repo/core/schemas'
-import { Badge, Button, Card, CardBody, EmptyState, Input, RatingStars } from '@repo/ui'
+import { Badge, Button, Card, CardBody, EmptyState, Input, RatingStars, Select } from '@repo/ui'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
@@ -88,6 +88,7 @@ function SubjectsBrowse() {
 					value={q}
 					onChange={(e) => setQ(e.target.value)}
 					placeholder="ค้นหาด้วยชื่อวิชา หรือรหัสวิชา"
+					aria-label="ค้นหารายวิชา"
 					inputMode="search"
 				/>
 				<Button type="submit">ค้นหา</Button>
@@ -97,28 +98,28 @@ function SubjectsBrowse() {
 				<Button variant={openOnly ? 'primary' : 'secondary'} size="sm" onClick={toggleOpen}>
 					{openOnly ? '✓ ' : ''}เปิดสอนเทอมนี้
 				</Button>
-				<select
+				<Select
+					aria-label="กรองตามวันที่เปิดสอน"
 					value={search.day ?? 0}
 					onChange={(e) => setDay(Number(e.target.value))}
-					className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 text-sm shadow-sm"
 				>
 					{DAYS.map((d) => (
 						<option key={d.value} value={d.value}>
 							{d.label}
 						</option>
 					))}
-				</select>
-				<select
+				</Select>
+				<Select
+					aria-label="กรองตามคะแนนรีวิว"
 					value={search.minRating ?? 0}
 					onChange={(e) => setMinRating(Number(e.target.value))}
-					className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 text-sm shadow-sm"
 				>
 					{RATING_FILTERS.map((r) => (
 						<option key={r.value} value={r.value}>
 							{r.label}
 						</option>
 					))}
-				</select>
+				</Select>
 				<span className="text-slate-500 text-sm">พบ {data.total} วิชา</span>
 			</div>
 
@@ -138,7 +139,7 @@ function SubjectsBrowse() {
 							key={subject.id}
 							to="/subjects/$subjectId"
 							params={{ subjectId: subject.id }}
-							className="block transition-transform hover:-translate-y-0.5"
+							className="block transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
 						>
 							<Card className="h-full">
 								<CardBody className="space-y-3">
@@ -231,18 +232,18 @@ function GroupFilter({
 			<CardBody className="space-y-3">
 				<div className="flex flex-wrap items-center gap-3">
 					<span className="font-medium text-slate-700 text-sm">กรองตามหลักสูตร</span>
-					<select
+					<Select
+						aria-label="กรองตามหลักสูตร"
 						value={curriculumId ?? 0}
 						onChange={(e) => onCurriculum(Number(e.target.value))}
-						className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 text-sm shadow-sm"
 					>
-						<option value={0}>— ทุกหลักสูตร —</option>
+						<option value={0}>ทุกหลักสูตร</option>
 						{(curricula ?? []).map((c) => (
 							<option key={c.id} value={c.id}>
 								{c.nameTh} ({c.year})
 							</option>
 						))}
-					</select>
+					</Select>
 					{selected.length > 0 && (
 						<Button size="sm" variant="ghost" onClick={() => onChange([])}>
 							ล้างกลุ่ม ({selected.length})

@@ -3,7 +3,7 @@ import {
 	type ProgressGroupResult,
 	type ProgressResult,
 } from '@repo/core/progress'
-import { Badge, Button, Card, CardBody, EmptyState, ProgressBar } from '@repo/ui'
+import { Badge, Button, Card, CardBody, EmptyState, ProgressBar, Switch } from '@repo/ui'
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
@@ -333,7 +333,7 @@ function ProgressView({
 					<div className="flex items-start justify-between gap-4">
 						<div>
 							<p className="font-semibold text-slate-900">{tree.curriculum.nameTh}</p>
-							<p className="text-slate-400 text-xs">
+							<p className="text-slate-500 text-xs">
 								{tree.curriculum.nameEn} {tree.curriculum.year ? `· ${tree.curriculum.year}` : ''}
 							</p>
 						</div>
@@ -444,7 +444,7 @@ function ProgressView({
 						<p className="font-medium text-slate-700 text-sm">
 							วิชาที่ยังไม่ถูกจัดเข้ากลุ่ม ({progress.unplaced.length})
 						</p>
-						<p className="mt-1 text-slate-400 text-xs">
+						<p className="mt-1 text-slate-500 text-xs">
 							{progress.unplaced.map((id) => courseInfo.get(id)?.name || id).join(', ')}
 						</p>
 					</CardBody>
@@ -516,25 +516,25 @@ function FreeElectivePicker({
 	return (
 		<div className="mt-2 space-y-2">
 			{picks.size > 0 && (
-				<ul className="space-y-1">
+				<ul className="divide-y divide-slate-100 sm:space-y-1 sm:divide-y-0">
 					{[...picks.entries()].map(([id, info]) => (
-						<li key={id} className="flex items-center gap-2 text-xs">
-							<span className="text-amber-500">＋</span>
+						<li key={id} className="flex items-center gap-3 py-2 sm:py-1">
 							<Link
 								to="/subjects/$subjectId"
 								params={{ subjectId: id }}
-								className="flex-1 truncate text-slate-700"
+								className="min-w-0 flex-1 truncate text-slate-900 text-sm hover:text-brand-700 sm:text-slate-700 sm:text-xs"
 							>
 								{id} {info.name}
 							</Link>
-							<span className="shrink-0 text-slate-400">{info.credit} นก.</span>
-							<button
-								type="button"
-								onClick={() => onRemove(id)}
-								className="shrink-0 text-red-500 hover:underline"
-							>
-								ลบ
-							</button>
+							<span className="shrink-0 text-slate-500 text-xs">{info.credit} นก.</span>
+							<Switch
+								checked
+								onChange={(on) => {
+									if (!on) onRemove(id)
+								}}
+								label={`เอาวิชา ${id} ออกจากแผน`}
+								className="shrink-0"
+							/>
 						</li>
 					))}
 				</ul>
@@ -545,53 +545,55 @@ function FreeElectivePicker({
 				value={q}
 				onChange={(e) => setQ(e.target.value)}
 				placeholder="กรองด้วยชื่อ/รหัสวิชา…"
-				className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs"
+				aria-label="กรองวิชาเลือกเสรี"
+				className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs placeholder:text-slate-500"
 			/>
 
 			{isPending ? (
-				<p className="text-slate-400 text-xs">กำลังโหลด…</p>
+				<p className="text-slate-500 text-xs">กำลังโหลด…</p>
 			) : list.length === 0 ? (
-				<p className="text-slate-400 text-xs">ไม่พบวิชาเลือกเสรีสำหรับหลักสูตรนี้</p>
+				<p className="text-slate-500 text-xs">ไม่พบวิชาเลือกเสรีสำหรับหลักสูตรนี้</p>
 			) : (
-				<ul className="space-y-1">
+				<ul className="divide-y divide-slate-100 sm:space-y-1 sm:divide-y-0">
 					{list.map((s) => {
 						const picked = picks.has(s.id)
 						const taken = takenSet.has(s.id)
 						return (
-							<li key={s.id} className="flex items-start gap-2 text-xs">
+							<li key={s.id} className="flex items-center gap-3 py-2 sm:py-1">
 								<div className="min-w-0 flex-1">
 									<Link
 										to="/subjects/$subjectId"
 										params={{ subjectId: s.id }}
-										className="block truncate text-slate-600 hover:text-brand-700"
+										className="block truncate text-slate-900 text-sm hover:text-brand-700 sm:text-slate-600 sm:text-xs"
 									>
 										{s.id} {s.nameTh ?? s.nameEn}
 									</Link>
-									{s.ruleTh && (
-										<p className="truncate text-[11px] text-slate-400" title={s.ruleTh}>
-											{s.ruleTh}
-										</p>
-									)}
+									<div className="mt-0.5 flex min-w-0 items-center gap-1 text-slate-500 text-xs sm:text-[11px]">
+										<span className="shrink-0">{s.credit ?? '-'} นก.</span>
+										{s.ruleTh && (
+											<span className="truncate" title={s.ruleTh}>
+												· {s.ruleTh}
+											</span>
+										)}
+									</div>
 								</div>
-								<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
 								{taken ? (
-									<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>
-								) : picked ? (
-									<span className="shrink-0 text-amber-600 text-[11px]">เลือกแล้ว</span>
+									<span className="shrink-0 font-medium text-green-600 text-xs">เรียนแล้ว</span>
 								) : (
-									<button
-										type="button"
-										onClick={() =>
-											onPick({
-												id: s.id,
-												name: s.nameTh ?? s.nameEn ?? s.id,
-												credit: s.credit ?? 0,
-											})
+									<Switch
+										checked={picked}
+										onChange={(on) =>
+											on
+												? onPick({
+														id: s.id,
+														name: s.nameTh ?? s.nameEn ?? s.id,
+														credit: s.credit ?? 0,
+													})
+												: onRemove(s.id)
 										}
-										className="shrink-0 text-brand-700 hover:underline"
-									>
-										+ เพิ่ม
-									</button>
+										label={`เลือกวิชาเลือกเสรี ${s.id}`}
+										className="shrink-0"
+									/>
 								)}
 							</li>
 						)
@@ -606,7 +608,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
 	return (
 		<div className="rounded-lg bg-slate-50 py-3">
 			<p className={`font-bold text-2xl ${tone}`}>{value}</p>
-			<p className="text-slate-400 text-xs">{label}</p>
+			<p className="text-slate-500 text-xs">{label}</p>
 		</div>
 	)
 }
@@ -657,23 +659,22 @@ function GroupNode({
 	const completeIfPlanned = !group.complete && req > 0 && projUsed >= req
 
 	return (
-		<div
-			className="rounded-lg border border-slate-200 bg-white p-3"
-			style={{ marginLeft: depth > 0 ? depth * 12 : 0 }}
-		>
-			<div className="flex items-center justify-between gap-3">
-				<div className="flex items-center gap-2">
+		<div className="rounded-lg border border-slate-200 bg-white p-3">
+			<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+				<div className="flex min-w-0 flex-wrap items-center gap-2">
 					{group.color && (
 						<span
 							className="h-2.5 w-2.5 shrink-0 rounded-full"
 							style={{ background: group.color }}
 						/>
 					)}
-					<span className="font-medium text-slate-800 text-sm">{group.name}</span>
+					<span className="min-w-0 break-words font-medium text-slate-800 text-sm">
+						{group.name}
+					</span>
 					{group.complete && <Badge tone="green">✓</Badge>}
 					{completeIfPlanned && <Badge tone="amber">ครบถ้าลงตามแผน</Badge>}
 				</div>
-				<span className="shrink-0 text-slate-500 text-xs">
+				<span className="ms-auto shrink-0 text-slate-500 text-xs">
 					{group.used}/{req} นก.
 					{planned > 0 && <span className="text-amber-600"> (+{planned})</span>}
 				</span>
@@ -700,53 +701,95 @@ function GroupNode({
 					<button
 						type="button"
 						onClick={() => setOpen((o) => !o)}
-						className="text-brand-700 text-xs hover:underline"
+						aria-expanded={open}
+						className="-mx-1 rounded px-1 py-0.5 text-brand-700 text-xs hover:underline pointer-coarse:py-2"
 					>
 						{open ? '▾' : '▸'} ดูรายวิชาในกลุ่ม
 						{defined.length > 0 ? ` (${takenCount}/${defined.length})` : ''}
 					</button>
 					{open && (
-						<ul className="mt-2 space-y-1">
+						<ul className="mt-2 divide-y divide-slate-100 sm:space-y-1 sm:divide-y-0">
 							{defined.map((s) => {
 								const taken = takenSet.has(s.id)
 								return (
-									<li key={s.id} className="flex items-center gap-2 text-xs">
-										<input
-											type="checkbox"
+									<li
+										key={s.id}
+										className="flex items-center gap-3 py-2 text-sm sm:flex-wrap sm:gap-x-2 sm:gap-y-1 sm:py-0 sm:text-xs"
+									>
+										{/* Desktop: checkbox on the left (dense-table layout, unchanged) */}
+										<label className="hidden shrink-0 cursor-pointer items-center sm:flex">
+											<input
+												type="checkbox"
+												checked={taken || simulated.has(s.id)}
+												disabled={taken}
+												onChange={() => onToggle(s.id)}
+												title={taken ? 'เรียนแล้ว' : 'จำลองว่าลงวิชานี้'}
+												aria-label={`จำลองลงวิชา ${s.id} ${s.name}`}
+												className="size-4 accent-amber-500"
+											/>
+										</label>
+										<div className="min-w-0 flex-1 sm:flex sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1">
+											<Link
+												to="/subjects/$subjectId"
+												params={{ subjectId: s.id }}
+												className={`block truncate sm:flex-1 sm:py-0.5 ${taken ? 'text-slate-700' : 'text-slate-900 hover:text-brand-700 sm:text-slate-500'}`}
+											>
+												{s.id} {s.name}
+											</Link>
+											{/* Desktop inline metadata */}
+											<span className="hidden shrink-0 text-slate-500 sm:inline">
+												{s.credit} นก.
+											</span>
+											{!taken && recommended.has(s.id) && (
+												<Badge tone="brand" className="hidden shrink-0 sm:inline-flex">
+													แนะนำ
+												</Badge>
+											)}
+											{taken && courseInfo.get(s.id)?.grade && (
+												<span className="hidden shrink-0 font-medium text-green-600 sm:inline">
+													{courseInfo.get(s.id)?.grade}
+												</span>
+											)}
+											{offeredMap.has(s.id) && (
+												<Badge
+													tone="green"
+													className="hidden shrink-0 sm:inline-flex sm:whitespace-nowrap"
+													title="วัน-เวลาเรียน · ลงล่วงหน้า/รับ"
+												>
+													{offeredLabel(offeredMap.get(s.id)!)}
+												</Badge>
+											)}
+											{/* Mobile subtitle line */}
+											<div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-slate-500 text-xs sm:hidden">
+												<span>{s.credit} นก.</span>
+												{offeredMap.has(s.id) && (
+													<span className="text-green-700">
+														· {offeredLabel(offeredMap.get(s.id)!)}
+													</span>
+												)}
+												{!taken && recommended.has(s.id) && (
+													<span className="text-brand-700">· แนะนำ</span>
+												)}
+												{taken && courseInfo.get(s.id)?.grade && (
+													<span className="font-medium text-green-600">
+														· เกรด {courseInfo.get(s.id)?.grade}
+													</span>
+												)}
+											</div>
+										</div>
+										{/* Mobile: switch on the right */}
+										<Switch
 											checked={taken || simulated.has(s.id)}
 											disabled={taken}
 											onChange={() => onToggle(s.id)}
-											title={taken ? 'เรียนแล้ว' : 'จำลองว่าลงวิชานี้'}
-											className="accent-amber-500"
+											label={`จำลองลงวิชา ${s.id} ${s.name}`}
+											className="shrink-0 sm:hidden"
 										/>
-										<Link
-											to="/subjects/$subjectId"
-											params={{ subjectId: s.id }}
-											className={`flex-1 truncate ${taken ? 'text-slate-700' : 'text-slate-500 hover:text-brand-700'}`}
-										>
-											{s.id} {s.name}
-										</Link>
-										<span className="shrink-0 text-slate-400">{s.credit} นก.</span>
-										{offeredMap.has(s.id) && (
-											<Badge
-												tone="green"
-												className="whitespace-nowrap"
-												title="วัน-เวลาเรียน · ลงล่วงหน้า/รับ"
-											>
-												{offeredLabel(offeredMap.get(s.id)!)}
-											</Badge>
-										)}
-										{!taken && recommended.has(s.id) && <Badge tone="brand">แนะนำ</Badge>}
-										{taken && courseInfo.get(s.id)?.grade && (
-											<span className="shrink-0 font-medium text-green-600">
-												{courseInfo.get(s.id)?.grade}
-											</span>
-										)}
 									</li>
 								)
 							})}
 							{prefixMatched.length > 0 && (
-								<li className="pt-1 text-slate-400 text-[11px]">นับเข้าหมวดนี้ (เทียบรหัส):</li>
+								<li className="pt-1 text-slate-500 text-[11px]">นับเข้าหมวดนี้ (เทียบรหัส):</li>
 							)}
 							{prefixMatched.map((id) => (
 								<li key={id} className="flex items-center gap-2 text-xs">

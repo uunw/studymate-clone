@@ -1,6 +1,6 @@
 import { authClient } from '@repo/auth/client'
 import { profileSchema } from '@repo/core/schemas'
-import { Alert, Button, Card, CardBody, CardHeader, Field, Input } from '@repo/ui'
+import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
@@ -154,21 +154,21 @@ function Profile() {
 				<CardBody className="space-y-3">
 					{curriculumError && <Alert tone="error">{curriculumError}</Alert>}
 					<Field label="เลือกหลักสูตรของคุณ" htmlFor="curriculum">
-						<select
+						<Select
 							id="curriculum"
-							className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+							className="w-full"
 							value={user.curriculumId ?? ''}
 							onChange={(e) => onSelectCurriculum(e.target.value)}
 						>
 							<option value="" disabled>
-								— เลือกหลักสูตร —
+								เลือกหลักสูตร
 							</option>
 							{curricula.map((c) => (
 								<option key={c.id} value={c.id}>
 									{c.nameTh} ({c.year})
 								</option>
 							))}
-						</select>
+						</Select>
 					</Field>
 				</CardBody>
 			</Card>
@@ -181,16 +181,16 @@ function Profile() {
 					<div className="flex items-center gap-4">
 						<img
 							src={user.image ?? avatarUrl(user.id)}
-							alt="avatar"
+							alt="รูปโปรไฟล์ปัจจุบัน"
 							className="h-16 w-16 rounded-full border border-slate-200 bg-white"
 						/>
 						<div>
 							<p className="font-medium text-slate-800 text-sm">รูปปัจจุบัน</p>
-							<p className="text-slate-400 text-xs">เลือกรูปแบบสุ่มด้านล่าง</p>
+							<p className="text-slate-500 text-xs">เลือกรูปแบบสุ่มด้านล่าง</p>
 						</div>
 					</div>
 					<div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
-						{seeds.map((seed) => {
+						{seeds.map((seed, i) => {
 							const url = avatarUrl(seed)
 							return (
 								<button
@@ -198,9 +198,10 @@ function Profile() {
 									type="button"
 									disabled={avatarBusy}
 									onClick={() => pickAvatar(url)}
-									className="rounded-full border-2 border-transparent transition-colors hover:border-brand-400 disabled:opacity-50"
+									aria-label={`เลือกรูปโปรไฟล์แบบที่ ${i + 1}`}
+									className="rounded-full border-2 border-transparent transition-colors hover:border-brand-400 disabled:opacity-50 motion-reduce:transition-none"
 								>
-									<img src={url} alt="avatar option" className="h-12 w-12 rounded-full bg-white" />
+									<img src={url} alt="" className="h-12 w-12 rounded-full bg-white" />
 								</button>
 							)
 						})}

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { cn } from './cn'
 
 function Star({ fill, className }: { fill: number; className?: string }) {
-	// fill: 0..1 fraction of the star to paint.
-	const id = `star-${Math.random().toString(36).slice(2)}`
+	// fill: 0..1 fraction of the star to paint. useId keeps the gradient id stable
+	// across SSR and client render (Math.random would cause a hydration mismatch).
+	const id = useId()
 	return (
 		<svg viewBox="0 0 20 20" className={cn('size-5', className)} aria-hidden>
 			<defs>
@@ -25,7 +26,7 @@ function Star({ fill, className }: { fill: number; className?: string }) {
 /** Read-only star rating (supports halves). */
 export function RatingStars({ value, className }: { value: number; className?: string }) {
 	return (
-		<div className={cn('flex text-amber-400', className)} aria-label={`${value} จาก 5`}>
+		<div className={cn('flex text-accent-500', className)} aria-label={`${value} จาก 5`}>
 			{[0, 1, 2, 3, 4].map((i) => (
 				<Star key={i} fill={Math.max(0, Math.min(1, value - i))} />
 			))}
@@ -38,13 +39,13 @@ export function RatingInput({ value, onChange }: { value: number; onChange: (v: 
 	const [hover, setHover] = useState<number | null>(null)
 	const shown = hover ?? value
 	return (
-		<div className="flex text-amber-400" onMouseLeave={() => setHover(null)}>
+		<div className="flex text-accent-500" onMouseLeave={() => setHover(null)}>
 			{[1, 2, 3, 4, 5].map((i) => (
 				<button
 					key={i}
 					type="button"
 					aria-label={`${i} ดาว`}
-					className="p-0.5"
+					className="flex size-11 items-center justify-center"
 					onMouseEnter={() => setHover(i)}
 					onClick={() => onChange(i)}
 				>
