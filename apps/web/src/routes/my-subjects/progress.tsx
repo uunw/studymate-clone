@@ -8,7 +8,12 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import type { Detail } from '~/components/my-subjects-types'
-import { myCurriculumTreeQuery, myTranscriptQuery, registrationPlanQuery } from '~/queries'
+import {
+	myCurriculumTreeQuery,
+	myTranscriptQuery,
+	registrationPlanQuery,
+	subjectsQuery,
+} from '~/queries'
 import type { CurriculumTree } from '~/server/progress'
 
 export const Route = createFileRoute('/my-subjects/progress')({
@@ -94,13 +99,20 @@ function ProgressView({
 		[details],
 	)
 
-	// Credit lookup for any selectable subject (defined-in-group + plan items).
+	// Free-elective subjects picked from the catalog (เลือกเสรี has no predefined
+	// list — the student picks any subject). id → name/credit, for display + credit.
+	const [freePicks, setFreePicks] = useState<Map<string, { name: string; credit: number }>>(
+		new Map(),
+	)
+
+	// Credit lookup for any selectable subject (defined-in-group + plan + free picks).
 	const creditOf = useMemo(() => {
 		const m = new Map<string, number>()
 		for (const list of groupSubjects.values()) for (const s of list) m.set(s.id, s.credit)
 		for (const p of planned) m.set(p.subjectId, p.credit)
+		for (const [id, info] of freePicks) m.set(id, info.credit)
 		return m
-	}, [groupSubjects, planned])
+	}, [groupSubjects, planned, freePicks])
 
 	// What-if simulation set: defaults to the registrar plan; the user can tick
 	// subjects, auto-fill to complete, reset, or clear. `dirty` stops the
@@ -123,10 +135,29 @@ function ProgressView({
 	const resetToPlan = () => {
 		setDirty(false)
 		setSimulated(new Set(recommended))
+		setFreePicks(new Map())
 	}
 	const clearSim = () => {
 		setDirty(true)
 		setSimulated(new Set())
+		setFreePicks(new Map())
+	}
+	const pickFree = (s: { id: string; name: string; credit: number }) => {
+		setDirty(true)
+		setFreePicks((prev) => new Map(prev).set(s.id, { name: s.name, credit: s.credit }))
+		setSimulated((prev) => new Set(prev).add(s.id))
+	}
+	const removeFree = (id: string) => {
+		setFreePicks((prev) => {
+			const next = new Map(prev)
+			next.delete(id)
+			return next
+		})
+		setSimulated((prev) => {
+			const next = new Set(prev)
+			next.delete(id)
+			return next
+		})
 	}
 
 	const simulatedCredit = useMemo(
@@ -256,6 +287,9 @@ function ProgressView({
 						recommended={recommended}
 						simulated={simulated}
 						onToggle={toggleSim}
+						freePicks={freePicks}
+						onPickFree={pickFree}
+						onRemoveFree={removeFree}
 						projectedUsed={projectedUsed}
 						depth={0}
 					/>
@@ -311,6 +345,114 @@ function ProjectionSummary({
 	)
 }
 
+/** Catalog search to pick free-elective subjects (เลือกเสรี has no fixed list). */
+function FreeElectivePicker({
+	picks,
+	takenSet,
+	onPick,
+	onRemove,
+}: {
+	picks: Map<string, { name: string; credit: number }>
+	takenSet: Set<string>
+	onPick: (s: { id: string; name: string; credit: number }) => void
+	onRemove: (id: string) => void
+}) {
+	const [q, setQ] = useState('')
+	const [applied, setApplied] = useState('')
+	const { data } = useQuery({
+		...subjectsQuery({ q: applied, page: 1, pageSize: 8 }),
+		enabled: applied.length >= 2,
+	})
+
+	return (
+		<div className="mt-2 space-y-2">
+			{picks.size > 0 && (
+				<ul className="space-y-1">
+					{[...picks.entries()].map(([id, info]) => (
+						<li key={id} className="flex items-center gap-2 text-xs">
+							<span className="text-amber-500">＋</span>
+							<Link
+								to="/subjects/$subjectId"
+								params={{ subjectId: id }}
+								className="flex-1 truncate text-slate-700"
+							>
+								{id} {info.name}
+							</Link>
+							<span className="shrink-0 text-slate-400">{info.credit} นก.</span>
+							<button
+								type="button"
+								onClick={() => onRemove(id)}
+								className="shrink-0 text-red-500 hover:underline"
+							>
+								ลบ
+							</button>
+						</li>
+					))}
+				</ul>
+			)}
+			<form
+				className="flex gap-2"
+				onSubmit={(e) => {
+					e.preventDefault()
+					setApplied(q.trim())
+				}}
+			>
+				<input
+					value={q}
+					onChange={(e) => setQ(e.target.value)}
+					placeholder="ค้นหาวิชาเลือกเสรี (ชื่อ/รหัส)…"
+					className="flex-1 rounded-md border border-slate-200 px-2 py-1 text-xs"
+				/>
+				<button
+					type="submit"
+					className="shrink-0 rounded-md bg-brand-50 px-3 py-1 font-medium text-brand-700 text-xs hover:bg-brand-100"
+				>
+					ค้นหา
+				</button>
+			</form>
+			{applied.length >= 2 && data && (
+				<ul className="space-y-1">
+					{data.items.length === 0 ? (
+						<li className="text-slate-400 text-xs">ไม่พบวิชา</li>
+					) : (
+						data.items.map((s) => {
+							const picked = picks.has(s.id)
+							const taken = takenSet.has(s.id)
+							return (
+								<li key={s.id} className="flex items-center gap-2 text-xs">
+									<span className="flex-1 truncate text-slate-600">
+										{s.id} {s.nameTh ?? s.nameEn}
+									</span>
+									<span className="shrink-0 text-slate-400">{s.credit ?? '-'} นก.</span>
+									{taken ? (
+										<span className="shrink-0 text-green-600 text-[11px]">เรียนแล้ว</span>
+									) : picked ? (
+										<span className="shrink-0 text-amber-600 text-[11px]">เลือกแล้ว</span>
+									) : (
+										<button
+											type="button"
+											onClick={() =>
+												onPick({
+													id: s.id,
+													name: s.nameTh ?? s.nameEn ?? s.id,
+													credit: s.credit ?? 0,
+												})
+											}
+											className="shrink-0 text-brand-700 hover:underline"
+										>
+											+ เพิ่ม
+										</button>
+									)}
+								</li>
+							)
+						})
+					)}
+				</ul>
+			)}
+		</div>
+	)
+}
+
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
 	return (
 		<div className="rounded-lg bg-slate-50 py-3">
@@ -328,6 +470,9 @@ function GroupNode({
 	recommended,
 	simulated,
 	onToggle,
+	freePicks,
+	onPickFree,
+	onRemoveFree,
 	projectedUsed,
 	depth,
 }: {
@@ -338,6 +483,9 @@ function GroupNode({
 	recommended: Set<string>
 	simulated: Set<string>
 	onToggle: (id: string) => void
+	freePicks: Map<string, { name: string; credit: number }>
+	onPickFree: (s: { id: string; name: string; credit: number }) => void
+	onRemoveFree: (id: string) => void
 	projectedUsed: Map<number, number>
 	depth: number
 }) {
@@ -348,6 +496,7 @@ function GroupNode({
 	const prefixMatched = group.matched.filter((id) => !defined.some((s) => s.id === id))
 	const takenCount = defined.filter((s) => takenSet.has(s.id)).length
 	const showSubjects = defined.length > 0 || prefixMatched.length > 0
+	const isFree = group.type === 'FREE'
 	const req = group.required
 	const projUsed = projectedUsed.get(group.id) ?? group.used
 	const planned = Math.max(0, projUsed - group.used)
@@ -382,6 +531,15 @@ function GroupNode({
 				secondaryPercent={req === 0 ? 0 : (planned / req) * 100}
 				tone={group.complete ? 'green' : 'brand'}
 			/>
+
+			{isFree && (
+				<FreeElectivePicker
+					picks={freePicks}
+					takenSet={takenSet}
+					onPick={onPickFree}
+					onRemove={onRemoveFree}
+				/>
+			)}
 
 			{!hasChildren && showSubjects && (
 				<div className="mt-2">
@@ -461,6 +619,9 @@ function GroupNode({
 							recommended={recommended}
 							simulated={simulated}
 							onToggle={onToggle}
+							freePicks={freePicks}
+							onPickFree={onPickFree}
+							onRemoveFree={onRemoveFree}
 							projectedUsed={projectedUsed}
 							depth={depth + 1}
 						/>
