@@ -19,8 +19,12 @@ import { Route as MySubjectsRouteImport } from './routes/my-subjects'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SubjectsIndexRouteImport } from './routes/subjects/index'
+import { Route as MySubjectsIndexRouteImport } from './routes/my-subjects/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as SubjectsSubjectIdRouteImport } from './routes/subjects/$subjectId'
+import { Route as MySubjectsTranscriptRouteImport } from './routes/my-subjects/transcript'
+import { Route as MySubjectsProgressRouteImport } from './routes/my-subjects/progress'
+import { Route as MySubjectsGradesRouteImport } from './routes/my-subjects/grades'
 import { Route as AdminProgramsRouteImport } from './routes/admin/programs'
 import { Route as AdminFacultiesRouteImport } from './routes/admin/faculties'
 import { Route as AdminDepartmentsRouteImport } from './routes/admin/departments'
@@ -78,6 +82,11 @@ const SubjectsIndexRoute = SubjectsIndexRouteImport.update({
   path: '/subjects/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MySubjectsIndexRoute = MySubjectsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MySubjectsRoute,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
@@ -87,6 +96,21 @@ const SubjectsSubjectIdRoute = SubjectsSubjectIdRouteImport.update({
   id: '/subjects/$subjectId',
   path: '/subjects/$subjectId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const MySubjectsTranscriptRoute = MySubjectsTranscriptRouteImport.update({
+  id: '/transcript',
+  path: '/transcript',
+  getParentRoute: () => MySubjectsRoute,
+} as any)
+const MySubjectsProgressRoute = MySubjectsProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
+  getParentRoute: () => MySubjectsRoute,
+} as any)
+const MySubjectsGradesRoute = MySubjectsGradesRouteImport.update({
+  id: '/grades',
+  path: '/grades',
+  getParentRoute: () => MySubjectsRoute,
 } as any)
 const AdminProgramsRoute = AdminProgramsRouteImport.update({
   id: '/admin/programs',
@@ -123,7 +147,7 @@ const AdminCurriculumGroupCurriculumIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/my-subjects': typeof MySubjectsRoute
+  '/my-subjects': typeof MySubjectsRouteWithChildren
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/profile': typeof ProfileRoute
   '/reviews': typeof ReviewsRoute
@@ -134,8 +158,12 @@ export interface FileRoutesByFullPath {
   '/admin/departments': typeof AdminDepartmentsRoute
   '/admin/faculties': typeof AdminFacultiesRoute
   '/admin/programs': typeof AdminProgramsRoute
+  '/my-subjects/grades': typeof MySubjectsGradesRoute
+  '/my-subjects/progress': typeof MySubjectsProgressRoute
+  '/my-subjects/transcript': typeof MySubjectsTranscriptRoute
   '/subjects/$subjectId': typeof SubjectsSubjectIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/my-subjects/': typeof MySubjectsIndexRoute
   '/subjects/': typeof SubjectsIndexRoute
   '/admin/curriculum-group/$curriculumId': typeof AdminCurriculumGroupCurriculumIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -143,7 +171,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/my-subjects': typeof MySubjectsRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/profile': typeof ProfileRoute
   '/reviews': typeof ReviewsRoute
@@ -154,8 +181,12 @@ export interface FileRoutesByTo {
   '/admin/departments': typeof AdminDepartmentsRoute
   '/admin/faculties': typeof AdminFacultiesRoute
   '/admin/programs': typeof AdminProgramsRoute
+  '/my-subjects/grades': typeof MySubjectsGradesRoute
+  '/my-subjects/progress': typeof MySubjectsProgressRoute
+  '/my-subjects/transcript': typeof MySubjectsTranscriptRoute
   '/subjects/$subjectId': typeof SubjectsSubjectIdRoute
   '/admin': typeof AdminIndexRoute
+  '/my-subjects': typeof MySubjectsIndexRoute
   '/subjects': typeof SubjectsIndexRoute
   '/admin/curriculum-group/$curriculumId': typeof AdminCurriculumGroupCurriculumIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -164,7 +195,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/my-subjects': typeof MySubjectsRoute
+  '/my-subjects': typeof MySubjectsRouteWithChildren
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/profile': typeof ProfileRoute
   '/reviews': typeof ReviewsRoute
@@ -175,8 +206,12 @@ export interface FileRoutesById {
   '/admin/departments': typeof AdminDepartmentsRoute
   '/admin/faculties': typeof AdminFacultiesRoute
   '/admin/programs': typeof AdminProgramsRoute
+  '/my-subjects/grades': typeof MySubjectsGradesRoute
+  '/my-subjects/progress': typeof MySubjectsProgressRoute
+  '/my-subjects/transcript': typeof MySubjectsTranscriptRoute
   '/subjects/$subjectId': typeof SubjectsSubjectIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/my-subjects/': typeof MySubjectsIndexRoute
   '/subjects/': typeof SubjectsIndexRoute
   '/admin/curriculum-group/$curriculumId': typeof AdminCurriculumGroupCurriculumIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -197,8 +232,12 @@ export interface FileRouteTypes {
     | '/admin/departments'
     | '/admin/faculties'
     | '/admin/programs'
+    | '/my-subjects/grades'
+    | '/my-subjects/progress'
+    | '/my-subjects/transcript'
     | '/subjects/$subjectId'
     | '/admin/'
+    | '/my-subjects/'
     | '/subjects/'
     | '/admin/curriculum-group/$curriculumId'
     | '/api/auth/$'
@@ -206,7 +245,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
-    | '/my-subjects'
     | '/privacy-policy'
     | '/profile'
     | '/reviews'
@@ -217,8 +255,12 @@ export interface FileRouteTypes {
     | '/admin/departments'
     | '/admin/faculties'
     | '/admin/programs'
+    | '/my-subjects/grades'
+    | '/my-subjects/progress'
+    | '/my-subjects/transcript'
     | '/subjects/$subjectId'
     | '/admin'
+    | '/my-subjects'
     | '/subjects'
     | '/admin/curriculum-group/$curriculumId'
     | '/api/auth/$'
@@ -237,8 +279,12 @@ export interface FileRouteTypes {
     | '/admin/departments'
     | '/admin/faculties'
     | '/admin/programs'
+    | '/my-subjects/grades'
+    | '/my-subjects/progress'
+    | '/my-subjects/transcript'
     | '/subjects/$subjectId'
     | '/admin/'
+    | '/my-subjects/'
     | '/subjects/'
     | '/admin/curriculum-group/$curriculumId'
     | '/api/auth/$'
@@ -247,7 +293,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
-  MySubjectsRoute: typeof MySubjectsRoute
+  MySubjectsRoute: typeof MySubjectsRouteWithChildren
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   ProfileRoute: typeof ProfileRoute
   ReviewsRoute: typeof ReviewsRoute
@@ -337,6 +383,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SubjectsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my-subjects/': {
+      id: '/my-subjects/'
+      path: '/'
+      fullPath: '/my-subjects/'
+      preLoaderRoute: typeof MySubjectsIndexRouteImport
+      parentRoute: typeof MySubjectsRoute
+    }
     '/admin/': {
       id: '/admin/'
       path: '/admin'
@@ -350,6 +403,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/subjects/$subjectId'
       preLoaderRoute: typeof SubjectsSubjectIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/my-subjects/transcript': {
+      id: '/my-subjects/transcript'
+      path: '/transcript'
+      fullPath: '/my-subjects/transcript'
+      preLoaderRoute: typeof MySubjectsTranscriptRouteImport
+      parentRoute: typeof MySubjectsRoute
+    }
+    '/my-subjects/progress': {
+      id: '/my-subjects/progress'
+      path: '/progress'
+      fullPath: '/my-subjects/progress'
+      preLoaderRoute: typeof MySubjectsProgressRouteImport
+      parentRoute: typeof MySubjectsRoute
+    }
+    '/my-subjects/grades': {
+      id: '/my-subjects/grades'
+      path: '/grades'
+      fullPath: '/my-subjects/grades'
+      preLoaderRoute: typeof MySubjectsGradesRouteImport
+      parentRoute: typeof MySubjectsRoute
     }
     '/admin/programs': {
       id: '/admin/programs'
@@ -396,10 +470,28 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface MySubjectsRouteChildren {
+  MySubjectsGradesRoute: typeof MySubjectsGradesRoute
+  MySubjectsProgressRoute: typeof MySubjectsProgressRoute
+  MySubjectsTranscriptRoute: typeof MySubjectsTranscriptRoute
+  MySubjectsIndexRoute: typeof MySubjectsIndexRoute
+}
+
+const MySubjectsRouteChildren: MySubjectsRouteChildren = {
+  MySubjectsGradesRoute: MySubjectsGradesRoute,
+  MySubjectsProgressRoute: MySubjectsProgressRoute,
+  MySubjectsTranscriptRoute: MySubjectsTranscriptRoute,
+  MySubjectsIndexRoute: MySubjectsIndexRoute,
+}
+
+const MySubjectsRouteWithChildren = MySubjectsRoute._addFileChildren(
+  MySubjectsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
-  MySubjectsRoute: MySubjectsRoute,
+  MySubjectsRoute: MySubjectsRouteWithChildren,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   ProfileRoute: ProfileRoute,
   ReviewsRoute: ReviewsRoute,

@@ -1,0 +1,1 @@
+ALTER TABLE "curriculum_group" ADD COLUMN "accept_prefix" varchar(16);

@@ -658,6 +658,21 @@ async function main() {
 		.set({ type: 'REQUIRED_CREDIT' })
 		.where(eq(schema.curriculumGroup.type, 'subgroup'))
 
+	// 2c. Gen-ed subgroups accept any KMITL gen-ed subject (code prefix '90')
+	// beyond their explicit links, so a student's gen-ed courses count toward the
+	// 30-credit หมวดวิชาศึกษาทั่วไป even when not individually mapped. Idempotent.
+	await db
+		.update(schema.curriculumGroup)
+		.set({ acceptPrefix: '90' })
+		.where(
+			inArray(schema.curriculumGroup.name, [
+				'วิชาพื้นฐาน',
+				'วิชาด้านภาษาและการสื่อสาร',
+				'วิชาตามเกณฑ์ของคณะ',
+				'วิชาเลือก',
+			]),
+		)
+
 	// 3. group↔subject links — resolve group ids by name, add any that are missing.
 	const names = [...new Set(SUBJECTS.map((s) => GROUP_NAME[s.group]!))]
 	const grows = await db

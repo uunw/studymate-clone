@@ -218,6 +218,7 @@ function NodeEditor({
 	const [name, setName] = useState(node?.name ?? '')
 	const [credit, setCredit] = useState<string>(node?.credit != null ? String(node.credit) : '')
 	const [color, setColor] = useState(node?.color ?? '#2563eb')
+	const [acceptPrefix, setAcceptPrefix] = useState(node?.acceptPrefix ?? '')
 	const [saving, setSaving] = useState(false)
 	const [err, setErr] = useState<string | null>(null)
 
@@ -234,6 +235,7 @@ function NodeEditor({
 			name: name.trim(),
 			credit: credit === '' ? null : Number(credit),
 			color: color || null,
+			acceptPrefix: acceptPrefix.trim() || null,
 		}
 		try {
 			if (isEdit && node) {
@@ -295,6 +297,18 @@ function NodeEditor({
 							/>
 						</Field>
 					</div>
+					<Field
+						label="รับรหัสขึ้นต้นด้วย (ไม่บังคับ)"
+						htmlFor="group-prefix"
+						hint="เช่น 90 = นับวิชา gen-ed ทุกตัวเข้ากลุ่มนี้ (นอกเหนือจากวิชาที่ผูกไว้) จนเต็มหน่วยกิต"
+					>
+						<Input
+							id="group-prefix"
+							value={acceptPrefix}
+							onChange={(e) => setAcceptPrefix(e.target.value)}
+							placeholder="90"
+						/>
+					</Field>
 					<div className="flex gap-2">
 						<Button type="submit" loading={saving}>
 							{isEdit ? 'บันทึก' : 'เพิ่ม'}

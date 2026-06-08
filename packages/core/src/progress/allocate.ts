@@ -19,7 +19,14 @@ export type GroupType =
 	| 'REQUIRED_BRANCH'
 	| 'COLLECTIVE'
 
-export type GroupSubject = { id: string; credit: number }
+export type GroupSubject = {
+	id: string
+	credit: number
+	// optional display fields (ignored by allocation; used by the progress UI to
+	// list every subject in a group with a "completed" check)
+	nameTh?: string | null
+	nameEn?: string | null
+}
 
 export type ProgressGroupInput = {
 	id: number
@@ -27,6 +34,9 @@ export type ProgressGroupInput = {
 	type: string | null
 	credit: number | null
 	color: string | null
+	/** Subject-code prefix this group accepts beyond its explicit subjects
+	 *  (e.g. '90' = any gen-ed subject counts toward this group). */
+	acceptPrefix?: string | null
 	subjects: GroupSubject[]
 	children: ProgressGroupInput[]
 }
@@ -111,23 +121,29 @@ export function allocateProgress(
 
 const subjectCredit = (g: ProgressGroupInput) => g.subjects.reduce((s, x) => s + (x.credit || 0), 0)
 
-/** Required credits per group. Credit-typed nodes use their own credit (falling
- *  back to the children sum when unset); REQUIRED_ALL sums its subjects. */
+/** Required credits per group (ported from the original computeRequiredCredits,
+ *  in the same branch order):
+ *   1. REQUIRED_ALL, or any credit-less leaf bucket with subjects → sum subjects.
+ *   2. credit-typed groups (RC/RB/FREE/COLLECTIVE) → their own credit (falling
+ *      back to the children sum when unset, so credit-less containers still total).
+ *   3. otherwise → children sum + own credit.
+ *  Branch 1 MUST precede branch 2 — a COLLECTIVE elective bucket has credit 0 but
+ *  needs the subject-sum, or it gets required 0 and can place nothing. */
 function computeRequired(g: ProgressGroupInput, required: Map<number, number>): number {
 	let childReq = 0
 	for (const c of g.children) childReq += computeRequired(c, required)
 
-	let req: number
 	const credit = g.credit ?? 0
-	if (
+	let req: number
+	if ((g.type === 'REQUIRED_ALL' || credit === 0) && g.subjects.length > 0) {
+		req = childReq + subjectCredit(g)
+	} else if (
 		g.type === 'REQUIRED_CREDIT' ||
 		g.type === 'REQUIRED_BRANCH' ||
 		g.type === 'FREE' ||
 		g.type === 'COLLECTIVE'
 	) {
 		req = credit > 0 ? credit : childReq
-	} else if (g.type === 'REQUIRED_ALL' || credit === 0) {
-		req = childReq + subjectCredit(g)
 	} else {
 		req = childReq + credit
 	}
@@ -152,7 +168,9 @@ function place(
 	}
 
 	const c = item.credit
-	const isMember = g.subjects.some((s) => s.id === item.subjectId)
+	const isMember =
+		g.subjects.some((s) => s.id === item.subjectId) ||
+		(!!g.acceptPrefix && item.subjectId.startsWith(g.acceptPrefix))
 	const add = () => {
 		used.set(g.id, Math.min(u + c, req))
 		const list = matched.get(g.id) ?? []

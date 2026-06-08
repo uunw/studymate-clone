@@ -89,6 +89,27 @@ describe('allocateProgress', () => {
 		expect(withX.totalUsed).toBe(3)
 	})
 
+	it('acceptPrefix: counts subjects by code prefix beyond explicit links, up to cap', () => {
+		const root: ProgressGroupInput = {
+			id: 1,
+			name: 'gened',
+			type: 'REQUIRED_CREDIT',
+			credit: 6,
+			color: null,
+			acceptPrefix: '90',
+			subjects: [],
+			children: [],
+		}
+		const r = allocateProgress(root, [
+			{ subjectId: '90644007', credit: 3, grade: 'S' }, // gen-ed → matches prefix
+			{ subjectId: '90642118', credit: 3, grade: 'A' }, // gen-ed → matches prefix
+			{ subjectId: '01076011', credit: 3, grade: 'A' }, // major → not 90, ignored
+		])
+		expect(r.totalUsed).toBe(6) // both gen-ed counted, capped at 6
+		expect(r.complete).toBe(true)
+		expect(r.unplaced).toContain('01076011') // non-gen-ed didn't fit here
+	})
+
 	it('nested tree: rolls child usage up to the root and respects DFS membership', () => {
 		const root: ProgressGroupInput = {
 			id: 1,

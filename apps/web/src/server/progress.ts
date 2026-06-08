@@ -56,16 +56,21 @@ export const getMyCurriculumTree = createServerFn({ method: 'GET' }).handler(
 						groupId: schema.curriculumGroupSubject.groupId,
 						subjectId: schema.curriculumGroupSubject.subjectId,
 						credit: schema.subject.credit,
+						nameTh: schema.subject.nameTh,
+						nameEn: schema.subject.nameEn,
 					})
 					.from(schema.curriculumGroupSubject)
 					.leftJoin(schema.subject, eq(schema.subject.id, schema.curriculumGroupSubject.subjectId))
 					.where(inArray(schema.curriculumGroupSubject.groupId, ids))
 			: []
 
-		const subjectsByGroup = new Map<number, { id: string; credit: number }[]>()
+		const subjectsByGroup = new Map<
+			number,
+			{ id: string; credit: number; nameTh: string | null; nameEn: string | null }[]
+		>()
 		for (const l of links) {
 			const list = subjectsByGroup.get(l.groupId) ?? []
-			list.push({ id: l.subjectId, credit: l.credit ?? 0 })
+			list.push({ id: l.subjectId, credit: l.credit ?? 0, nameTh: l.nameTh, nameEn: l.nameEn })
 			subjectsByGroup.set(l.groupId, list)
 		}
 		const childrenByParent = new Map<number, typeof rows>()
@@ -86,6 +91,7 @@ export const getMyCurriculumTree = createServerFn({ method: 'GET' }).handler(
 			type: r.type,
 			credit: r.credit,
 			color: r.color,
+			acceptPrefix: r.acceptPrefix,
 			subjects: subjectsByGroup.get(r.id) ?? [],
 			children: (childrenByParent.get(r.id) ?? []).map(build),
 		})

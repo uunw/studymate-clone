@@ -15,6 +15,7 @@ export type AdminGroupNode = {
 	name: string | null
 	credit: number | null
 	color: string | null
+	acceptPrefix: string | null
 	subjects: AdminGroupSubject[]
 	children: AdminGroupNode[]
 }
@@ -108,6 +109,7 @@ export const getCurriculumGroupTree = createServerFn({ method: 'GET' })
 			name: r.name,
 			credit: r.credit,
 			color: r.color,
+			acceptPrefix: r.acceptPrefix,
 			subjects: (subjectsByGroup.get(r.id) ?? []).sort((a, b) => a.id.localeCompare(b.id)),
 			children: (childrenByParent.get(r.id) ?? []).map(build),
 		})
@@ -120,6 +122,7 @@ const groupInput = z.object({
 	name: z.string().min(1, 'กรุณากรอกชื่อกลุ่ม'),
 	credit: z.number().int().min(0).nullable(),
 	color: z.string().max(32).nullable(),
+	acceptPrefix: z.string().max(16).nullable(),
 })
 
 export const createCurriculumGroup = createServerFn({ method: 'POST' })
@@ -135,6 +138,7 @@ export const createCurriculumGroup = createServerFn({ method: 'POST' })
 				name: data.name,
 				credit: data.credit,
 				color: data.color,
+				acceptPrefix: data.acceptPrefix,
 			})
 			.returning()
 		return { id: row!.id }
@@ -147,7 +151,13 @@ export const updateCurriculumGroup = createServerFn({ method: 'POST' })
 		await requireAdmin()
 		await db
 			.update(schema.curriculumGroup)
-			.set({ type: data.type, name: data.name, credit: data.credit, color: data.color })
+			.set({
+				type: data.type,
+				name: data.name,
+				credit: data.credit,
+				color: data.color,
+				acceptPrefix: data.acceptPrefix,
+			})
 			.where(eq(schema.curriculumGroup.id, data.id))
 		return { id: data.id }
 	})

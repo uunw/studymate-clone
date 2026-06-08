@@ -69,6 +69,9 @@ export const curriculumGroup = pgTable('curriculum_group', {
 	name: varchar('name', { length: 256 }),
 	credit: integer('credit'),
 	color: varchar('color', { length: 32 }),
+	// subject-code prefix this group also accepts (beyond explicit links), e.g.
+	// '90' = any KMITL gen-ed subject counts toward this group up to its credit.
+	acceptPrefix: varchar('accept_prefix', { length: 16 }),
 })
 
 export const curriculum = pgTable('curriculum', {
