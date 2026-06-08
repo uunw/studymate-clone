@@ -13,9 +13,9 @@ import {
 	facultiesQuery,
 	myCurriculumTreeQuery,
 	myTranscriptQuery,
+	offeredElectivesQuery,
 	registrationPlanQuery,
 	subjectSchedulesQuery,
-	subjectsQuery,
 } from '~/queries'
 import type { CurriculumTree } from '~/server/progress'
 import type { SubjectSchedule } from '~/server/subjects'
@@ -424,17 +424,18 @@ function FreeElectivePicker({
 	const [page, setPage] = useState(1)
 	const [facultyId, setFacultyId] = useState(0)
 	const [departmentId, setDepartmentId] = useState(0)
+	const [includeRestricted, setIncludeRestricted] = useState(false)
 	const { data: faculties } = useQuery(facultiesQuery())
 	const { data: departments } = useQuery({
 		...departmentsQuery(facultyId || undefined),
 		enabled: facultyId > 0,
 	})
 	const { data } = useQuery(
-		subjectsQuery({
+		offeredElectivesQuery({
 			q: applied || undefined,
-			openOnly: true,
 			facultyId: facultyId || undefined,
 			departmentId: departmentId || undefined,
+			includeRestricted,
 			page,
 			pageSize: 8,
 		}),
@@ -502,6 +503,17 @@ function FreeElectivePicker({
 					</select>
 				)}
 			</div>
+			<label className="flex items-center gap-1.5 text-slate-500 text-xs">
+				<input
+					type="checkbox"
+					checked={includeRestricted}
+					onChange={(e) => {
+						setIncludeRestricted(e.target.checked)
+						setPage(1)
+					}}
+				/>
+				แสดงวิชาที่ติดเงื่อนไข/ลงไม่ได้ด้วย
+			</label>
 			<form
 				className="flex gap-2"
 				onSubmit={(e) => {

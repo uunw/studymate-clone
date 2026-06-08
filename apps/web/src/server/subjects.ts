@@ -1,7 +1,9 @@
+import { hasCondition, isSectionOpenToStudent } from '@repo/core/eligibility'
 import { subjectFilterSchema } from '@repo/core/schemas'
 import { pageBounds } from '@repo/core/utils'
 import { and, asc, avg, count, db, desc, eq, inArray, schema, sql } from '@repo/db'
 import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 
 /** Paginated subject list with average rating, review count, and sections-offered-this-term. */
 export const listSubjects = createServerFn({ method: 'GET' })
@@ -179,6 +181,118 @@ export const listCurriculumGroupOptions = createServerFn({ method: 'GET' })
 		})
 		// Drop the single curriculum-root wrapper; return its top categories.
 		return (childrenByParent.get(root.id) ?? []).map(build)
+	})
+
+export type OfferedElective = {
+	id: string
+	nameTh: string | null
+	nameEn: string | null
+	credit: number | null
+	ruleTh: string | null
+	restricted: boolean
+}
+
+/**
+ * Subjects offered this term for the free-elective picker, with each subject's
+ * registration condition (เงื่อนไข). By default subjects the signed-in student
+ * can't register for — restricted to a student-id range/set that excludes them —
+ * are hidden; `includeRestricted` shows them. Filterable by faculty/department.
+ */
+export const listOfferedElectives = createServerFn({ method: 'GET' })
+	.inputValidator(
+		z.object({
+			q: z.string().trim().optional(),
+			facultyId: z.coerce.number().int().positive().optional(),
+			departmentId: z.coerce.number().int().positive().optional(),
+			includeRestricted: z.boolean().optional(),
+			page: z.coerce.number().int().min(1).default(1),
+			pageSize: z.coerce.number().int().min(1).max(50).default(8),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const { readUser } = await import('./auth.server')
+		const user = await readUser()
+		const studentId = Number(user?.username ?? Number.NaN)
+
+		const [cur] = await db
+			.select({ id: schema.teachtable.id })
+			.from(schema.teachtable)
+			.orderBy(desc(schema.teachtable.year), desc(schema.teachtable.term))
+			.limit(1)
+		const ttId = cur?.id ?? -1
+
+		const like = `%${data.q ?? ''}%`
+		const conds = [eq(schema.subjectClass.teachtableId, ttId)]
+		if (data.q) {
+			conds.push(
+				sql`(${schema.subject.nameTh} ILIKE ${like} OR ${schema.subject.nameEn} ILIKE ${like} OR ${schema.subject.id} ILIKE ${like})`,
+			)
+		}
+		if (data.departmentId) {
+			conds.push(
+				sql`EXISTS (SELECT 1 FROM ${schema.program} p WHERE p.id = ${schema.subjectClass.programId} AND p.department_id = ${data.departmentId})`,
+			)
+		}
+		if (data.facultyId) {
+			conds.push(
+				sql`EXISTS (SELECT 1 FROM ${schema.program} p JOIN ${schema.department} d ON d.id = p.department_id WHERE p.id = ${schema.subjectClass.programId} AND d.faculty_id = ${data.facultyId})`,
+			)
+		}
+
+		const rows = await db
+			.select({
+				id: schema.subject.id,
+				nameTh: schema.subject.nameTh,
+				nameEn: schema.subject.nameEn,
+				credit: schema.subject.credit,
+				ruleTh: schema.subjectClass.ruleTh,
+			})
+			.from(schema.subjectClass)
+			.innerJoin(schema.subject, eq(schema.subject.id, schema.subjectClass.subjectId))
+			.where(and(...conds))
+
+		// Group sections by subject; a subject is eligible if ANY of its sections
+		// admits the student, restricted if any section carries a condition.
+		const bySubj = new Map<string, OfferedElective & { open: boolean }>()
+		for (const r of rows) {
+			const cur = bySubj.get(r.id)
+			const open = isSectionOpenToStudent(r.ruleTh, studentId)
+			if (!cur) {
+				bySubj.set(r.id, {
+					id: r.id,
+					nameTh: r.nameTh,
+					nameEn: r.nameEn,
+					credit: r.credit,
+					ruleTh: hasCondition(r.ruleTh) ? r.ruleTh : null,
+					restricted: hasCondition(r.ruleTh),
+					open,
+				})
+			} else {
+				cur.open = cur.open || open
+				if (hasCondition(r.ruleTh)) {
+					cur.restricted = true
+					if (!cur.ruleTh) cur.ruleTh = r.ruleTh
+				}
+			}
+		}
+
+		const hideRestricted = !data.includeRestricted && Number.isFinite(studentId)
+		const all = [...bySubj.values()]
+			.filter((s) => (hideRestricted ? s.open : true))
+			.sort((a, b) => a.id.localeCompare(b.id))
+
+		const total = all.length
+		const start = (data.page - 1) * data.pageSize
+		const items: OfferedElective[] = all
+			.slice(start, start + data.pageSize)
+			.map(({ open: _open, ...s }) => s)
+		return {
+			items,
+			page: data.page,
+			pageSize: data.pageSize,
+			total,
+			totalPages: Math.max(1, Math.ceil(total / data.pageSize)),
+		}
 	})
 
 export type SubjectSchedule = {
