@@ -13,6 +13,7 @@ import {
 	myCurriculumTreeQuery,
 	myPlanSelectionQuery,
 	myTranscriptQuery,
+	offeredSubjectIdsQuery,
 	registrationPlanQuery,
 	subjectSchedulesQuery,
 } from '~/queries'
@@ -135,6 +136,10 @@ function ProgressView({
 		() => new Set(details.map((d) => d.subjectId).filter((id): id is string => !!id)),
 		[details],
 	)
+
+	// Subjects offered this term — for the "เปิดสอน" badge.
+	const { data: offered } = useQuery(offeredSubjectIdsQuery())
+	const offeredSet = useMemo(() => new Set(offered ?? []), [offered])
 
 	// Free-elective subjects picked from the catalog (เลือกเสรี has no predefined
 	// list — the student picks any subject). id → name/credit, for display + credit.
@@ -390,6 +395,7 @@ function ProgressView({
 						courseInfo={courseInfo}
 						groupSubjects={groupSubjects}
 						takenSet={takenSet}
+						offeredSet={offeredSet}
 						recommended={recommended}
 						simulated={simulated}
 						onToggle={toggleSim}
@@ -581,6 +587,7 @@ function GroupNode({
 	courseInfo,
 	groupSubjects,
 	takenSet,
+	offeredSet,
 	recommended,
 	simulated,
 	onToggle,
@@ -595,6 +602,7 @@ function GroupNode({
 	courseInfo: Map<string, { name: string; grade: string | null }>
 	groupSubjects: Map<number, GroupSubjectInfo[]>
 	takenSet: Set<string>
+	offeredSet: Set<string>
 	recommended: Set<string>
 	simulated: Set<string>
 	onToggle: (id: string) => void
@@ -689,6 +697,7 @@ function GroupNode({
 											{s.id} {s.name}
 										</Link>
 										<span className="shrink-0 text-slate-400">{s.credit} นก.</span>
+										{offeredSet.has(s.id) && <Badge tone="green">เปิดสอน</Badge>}
 										{!taken && recommended.has(s.id) && <Badge tone="brand">แนะนำ</Badge>}
 										{taken && courseInfo.get(s.id)?.grade && (
 											<span className="shrink-0 font-medium text-green-600">
@@ -733,6 +742,7 @@ function GroupNode({
 							courseInfo={courseInfo}
 							groupSubjects={groupSubjects}
 							takenSet={takenSet}
+							offeredSet={offeredSet}
 							recommended={recommended}
 							simulated={simulated}
 							onToggle={onToggle}

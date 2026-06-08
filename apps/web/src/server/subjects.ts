@@ -511,6 +511,23 @@ export const getSubjectSchedules = createServerFn({ method: 'GET' })
 		return [...bySubj.values()]
 	})
 
+/** Distinct subject ids offered this (latest) term — for "เปิดสอน" badges. */
+export const listOfferedSubjectIds = createServerFn({ method: 'GET' }).handler(
+	async (): Promise<string[]> => {
+		const [cur] = await db
+			.select({ id: schema.teachtable.id })
+			.from(schema.teachtable)
+			.orderBy(desc(schema.teachtable.year), desc(schema.teachtable.term))
+			.limit(1)
+		if (!cur) return []
+		const rows = await db
+			.selectDistinct({ subjectId: schema.subjectClass.subjectId })
+			.from(schema.subjectClass)
+			.where(eq(schema.subjectClass.teachtableId, cur.id))
+		return rows.map((r) => r.subjectId).filter((id): id is string => !!id)
+	},
+)
+
 export const listTeachtables = createServerFn({ method: 'GET' }).handler(async () => {
 	return db
 		.select()
