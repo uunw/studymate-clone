@@ -3,10 +3,10 @@ import {
 	type ProgressGroupResult,
 	type ProgressResult,
 } from '@repo/core/progress'
-import { Badge, Card, CardBody, EmptyState, ProgressBar } from '@repo/ui'
+import { Badge, Button, Card, CardBody, EmptyState, ProgressBar } from '@repo/ui'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Detail } from '~/components/my-subjects-types'
 import { myCurriculumTreeQuery, myTranscriptQuery, registrationPlanQuery } from '~/queries'
 import type { CurriculumTree } from '~/server/progress'
@@ -64,25 +64,6 @@ function ProgressView({
 		[tree, completed, includeX],
 	)
 
-	// Projection: re-run allocation as if the planned (recommended) subjects were
-	// passed. The delta vs `progress` is what registering this term's plan adds.
-	const projected: ProgressResult | null = useMemo(() => {
-		if (!tree || planned.length === 0) return null
-		const withPlan = [...completed, ...planned.map((p) => ({ ...p, grade: 'S' }))]
-		return allocateProgress(tree.root, withPlan, { includeX })
-	}, [tree, completed, planned, includeX])
-
-	// Per-group projected credit-used, looked up by group id when drawing bars.
-	const projectedUsed = useMemo(() => {
-		const m = new Map<number, number>()
-		const walk = (g: ProgressGroupResult) => {
-			m.set(g.id, g.used)
-			for (const c of g.children) walk(c)
-		}
-		if (projected) walk(projected.root)
-		return m
-	}, [projected])
-
 	const courseInfo = useMemo(() => {
 		const m = new Map<string, { name: string; grade: string | null }>()
 		for (const d of details) {
@@ -112,6 +93,78 @@ function ProgressView({
 		() => new Set(details.map((d) => d.subjectId).filter((id): id is string => !!id)),
 		[details],
 	)
+
+	// Credit lookup for any selectable subject (defined-in-group + plan items).
+	const creditOf = useMemo(() => {
+		const m = new Map<string, number>()
+		for (const list of groupSubjects.values()) for (const s of list) m.set(s.id, s.credit)
+		for (const p of planned) m.set(p.subjectId, p.credit)
+		return m
+	}, [groupSubjects, planned])
+
+	// Every curriculum subject the student hasn't taken yet (for "register all").
+	const allUntaken = useMemo(() => {
+		const s = new Set<string>()
+		for (const list of groupSubjects.values())
+			for (const x of list) if (!takenSet.has(x.id)) s.add(x.id)
+		return s
+	}, [groupSubjects, takenSet])
+
+	// What-if simulation set: defaults to the registrar plan; the user can tick
+	// subjects, "register everything left", reset, or clear. `dirty` stops the
+	// default-to-plan effect once the user has touched it.
+	const [simulated, setSimulated] = useState<Set<string>>(new Set())
+	const [dirty, setDirty] = useState(false)
+	useEffect(() => {
+		if (!dirty) setSimulated(new Set(recommended))
+	}, [recommended, dirty])
+
+	const toggleSim = (id: string) => {
+		setDirty(true)
+		setSimulated((prev) => {
+			const next = new Set(prev)
+			if (next.has(id)) next.delete(id)
+			else next.add(id)
+			return next
+		})
+	}
+	const simulateAllRemaining = () => {
+		setDirty(true)
+		setSimulated(new Set(allUntaken))
+	}
+	const resetToPlan = () => {
+		setDirty(false)
+		setSimulated(new Set(recommended))
+	}
+	const clearSim = () => {
+		setDirty(true)
+		setSimulated(new Set())
+	}
+
+	const simulatedCredit = useMemo(
+		() => [...simulated].reduce((s, id) => s + (creditOf.get(id) ?? 0), 0),
+		[simulated, creditOf],
+	)
+
+	const projected: ProgressResult | null = useMemo(() => {
+		if (!tree || simulated.size === 0) return null
+		const sim = [...simulated].map((id) => ({
+			subjectId: id,
+			credit: creditOf.get(id) ?? 0,
+			grade: 'S',
+		}))
+		return allocateProgress(tree.root, [...completed, ...sim], { includeX })
+	}, [tree, completed, simulated, creditOf, includeX])
+
+	const projectedUsed = useMemo(() => {
+		const m = new Map<number, number>()
+		const walk = (g: ProgressGroupResult) => {
+			m.set(g.id, g.used)
+			for (const c of g.children) walk(c)
+		}
+		if (projected) walk(projected.root)
+		return m
+	}, [projected])
 
 	if (!tree) {
 		return (
@@ -159,6 +212,34 @@ function ProgressView({
 						}
 						tone={progress.complete ? 'green' : 'brand'}
 					/>
+
+					<div className="space-y-2">
+						<div className="flex flex-wrap items-center gap-2 text-xs">
+							<span className="text-slate-500">จำลองการลงทะเบียน:</span>
+							<Button size="sm" variant="secondary" onClick={simulateAllRemaining}>
+								ลงครบทุกวิชาที่เหลือ
+							</Button>
+							<Button size="sm" variant="ghost" onClick={resetToPlan}>
+								แผนเทอมนี้
+							</Button>
+							{simulated.size > 0 && (
+								<Button size="sm" variant="ghost" onClick={clearSim}>
+									ล้าง
+								</Button>
+							)}
+							{simulated.size > 0 && (
+								<span className="font-medium text-amber-700">
+									{simulated.size} วิชา · +{simulatedCredit} นก.
+								</span>
+							)}
+						</div>
+						{simulatedCredit > 27 && (
+							<p className="text-amber-700 text-xs">
+								⚠ ถ้าลงทั้งหมดนี้ในเทอมเดียวจะเกินเพดาน ~27 นก./เทอม — ควรแบ่งหลายเทอม
+							</p>
+						)}
+					</div>
+
 					{projected && projected.totalUsed > progress.totalUsed && (
 						<ProjectionSummary current={progress} projected={projected} />
 					)}
@@ -182,6 +263,8 @@ function ProgressView({
 						groupSubjects={groupSubjects}
 						takenSet={takenSet}
 						recommended={recommended}
+						simulated={simulated}
+						onToggle={toggleSim}
 						projectedUsed={projectedUsed}
 						depth={0}
 					/>
@@ -213,21 +296,22 @@ function ProjectionSummary({
 }) {
 	const added = projected.totalUsed - current.totalUsed
 	const remaining = Math.max(0, projected.totalRequired - projected.totalUsed)
-	const estSubjects = Math.ceil(remaining / 3)
+	const estTerms = Math.ceil(remaining / 18) // ~18 credits/term typical full load
+	const estSubjects = Math.ceil(remaining / 3) // ~3 credits/subject typical
 	return (
 		<div className="space-y-1 rounded-lg bg-amber-50 px-3 py-2 text-xs">
 			<p className="text-amber-800">
 				<span className="inline-block h-2 w-2 rounded-full bg-amber-400 align-middle" />{' '}
-				<span className="font-semibold">ถ้าลงตามแผนเทอมนี้</span> (+{added} นก.) →{' '}
+				<span className="font-semibold">ถ้าลงตามที่เลือก</span> (+{added} นก.) →{' '}
 				<span className="font-semibold">{projected.percent}%</span>
 				<span className="text-amber-600"> (ตอนนี้ {current.percent}%)</span>
 			</p>
 			{projected.complete ? (
-				<p className="text-green-700">ลงตามแผนแล้วครบทุกหมวดของหลักสูตร 🎉</p>
+				<p className="font-medium text-green-700">ครบทุกหมวดของหลักสูตรแล้ว 🎉</p>
 			) : (
 				<p className="text-amber-700">
-					หลังจากนั้นเหลืออีก <span className="font-semibold">{remaining} นก.</span> (≈ {estSubjects}{' '}
-					วิชา) จะครบตามโครงสร้างหลักสูตร
+					หลังจากนั้นเหลืออีก <span className="font-semibold">{remaining} นก.</span> (≈ {estSubjects} วิชา
+					/ ~{estTerms} เทอม) จะครบตามโครงสร้างหลักสูตร
 				</p>
 			)}
 		</div>
@@ -249,6 +333,8 @@ function GroupNode({
 	groupSubjects,
 	takenSet,
 	recommended,
+	simulated,
+	onToggle,
 	projectedUsed,
 	depth,
 }: {
@@ -257,6 +343,8 @@ function GroupNode({
 	groupSubjects: Map<number, GroupSubjectInfo[]>
 	takenSet: Set<string>
 	recommended: Set<string>
+	simulated: Set<string>
+	onToggle: (id: string) => void
 	projectedUsed: Map<number, number>
 	depth: number
 }) {
@@ -268,7 +356,10 @@ function GroupNode({
 	const takenCount = defined.filter((s) => takenSet.has(s.id)).length
 	const showSubjects = defined.length > 0 || prefixMatched.length > 0
 	const req = group.required
-	const planned = Math.max(0, (projectedUsed.get(group.id) ?? group.used) - group.used)
+	const projUsed = projectedUsed.get(group.id) ?? group.used
+	const planned = Math.max(0, projUsed - group.used)
+	// Group completes only thanks to the simulation (D).
+	const completeIfPlanned = !group.complete && req > 0 && projUsed >= req
 
 	return (
 		<div
@@ -285,6 +376,7 @@ function GroupNode({
 					)}
 					<span className="font-medium text-slate-800 text-sm">{group.name}</span>
 					{group.complete && <Badge tone="green">✓</Badge>}
+					{completeIfPlanned && <Badge tone="amber">ครบถ้าลงตามแผน</Badge>}
 				</div>
 				<span className="shrink-0 text-slate-500 text-xs">
 					{group.used}/{req} นก.
@@ -314,9 +406,14 @@ function GroupNode({
 								const taken = takenSet.has(s.id)
 								return (
 									<li key={s.id} className="flex items-center gap-2 text-xs">
-										<span className={taken ? 'text-green-600' : 'text-slate-300'}>
-											{taken ? '✓' : '○'}
-										</span>
+										<input
+											type="checkbox"
+											checked={taken || simulated.has(s.id)}
+											disabled={taken}
+											onChange={() => onToggle(s.id)}
+											title={taken ? 'เรียนแล้ว' : 'จำลองว่าลงวิชานี้'}
+											className="accent-amber-500"
+										/>
 										<Link
 											to="/subjects/$subjectId"
 											params={{ subjectId: s.id }}
@@ -369,6 +466,8 @@ function GroupNode({
 							groupSubjects={groupSubjects}
 							takenSet={takenSet}
 							recommended={recommended}
+							simulated={simulated}
+							onToggle={onToggle}
 							projectedUsed={projectedUsed}
 							depth={depth + 1}
 						/>
