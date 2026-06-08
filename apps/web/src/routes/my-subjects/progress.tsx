@@ -4,11 +4,11 @@ import {
 	type ProgressResult,
 } from '@repo/core/progress'
 import { Badge, Card, CardBody, EmptyState, ProgressBar } from '@repo/ui'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import type { Detail } from '~/components/my-subjects-types'
-import { myCurriculumTreeQuery, myTranscriptQuery } from '~/queries'
+import { myCurriculumTreeQuery, myTranscriptQuery, registrationPlanQuery } from '~/queries'
 import type { CurriculumTree } from '~/server/progress'
 
 export const Route = createFileRoute('/my-subjects/progress')({
@@ -18,13 +18,27 @@ export const Route = createFileRoute('/my-subjects/progress')({
 function ProgressTab() {
 	const { data } = useSuspenseQuery(myTranscriptQuery())
 	const { data: tree } = useSuspenseQuery(myCurriculumTreeQuery())
+	// Recommended-this-term subjects (registrar pre-reg plan) — non-blocking.
+	const { data: plan } = useQuery(registrationPlanQuery())
+	const recommended = useMemo(
+		() => new Set((plan?.items ?? []).filter((i) => !i.taken).map((i) => i.subjectId)),
+		[plan],
+	)
 	if (!data) return null
-	return <ProgressView details={data.details} tree={tree} />
+	return <ProgressView details={data.details} tree={tree} recommended={recommended} />
 }
 
 type GroupSubjectInfo = { id: string; name: string; credit: number }
 
-function ProgressView({ details, tree }: { details: Detail[]; tree: CurriculumTree | null }) {
+function ProgressView({
+	details,
+	tree,
+	recommended,
+}: {
+	details: Detail[]
+	tree: CurriculumTree | null
+	recommended: Set<string>
+}) {
 	const [includeX, setIncludeX] = useState(false)
 
 	const progress: ProgressResult | null = useMemo(() => {
@@ -126,6 +140,7 @@ function ProgressView({ details, tree }: { details: Detail[]; tree: CurriculumTr
 						courseInfo={courseInfo}
 						groupSubjects={groupSubjects}
 						takenSet={takenSet}
+						recommended={recommended}
 						depth={0}
 					/>
 				))}
@@ -161,12 +176,14 @@ function GroupNode({
 	courseInfo,
 	groupSubjects,
 	takenSet,
+	recommended,
 	depth,
 }: {
 	group: ProgressGroupResult
 	courseInfo: Map<string, { name: string; grade: string | null }>
 	groupSubjects: Map<number, GroupSubjectInfo[]>
 	takenSet: Set<string>
+	recommended: Set<string>
 	depth: number
 }) {
 	const [open, setOpen] = useState(false)
@@ -230,6 +247,7 @@ function GroupNode({
 											{s.id} {s.name}
 										</Link>
 										<span className="shrink-0 text-slate-400">{s.credit} นก.</span>
+										{!taken && recommended.has(s.id) && <Badge tone="brand">แนะนำ</Badge>}
 										{taken && courseInfo.get(s.id)?.grade && (
 											<span className="shrink-0 font-medium text-green-600">
 												{courseInfo.get(s.id)?.grade}
@@ -272,6 +290,7 @@ function GroupNode({
 							courseInfo={courseInfo}
 							groupSubjects={groupSubjects}
 							takenSet={takenSet}
+							recommended={recommended}
 							depth={depth + 1}
 						/>
 					))}

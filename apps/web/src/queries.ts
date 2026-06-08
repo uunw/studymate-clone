@@ -3,6 +3,7 @@ import { queryOptions } from '@tanstack/react-query'
 import { getCurriculumGroupTree } from '~/server/curriculum-group'
 import { listCurricula, listDepartments, listFaculties, listPrograms } from '~/server/hierarchy'
 import { getMyCurriculumTree } from '~/server/progress'
+import { getRegistrationPlan } from '~/server/registration'
 import {
 	getReviewEligibility,
 	listCurriculumReviews,
@@ -104,6 +105,12 @@ export const myTranscriptQuery = () =>
 
 export const myCurriculumTreeQuery = () =>
 	queryOptions({ queryKey: ['my-curriculum-tree'], queryFn: () => getMyCurriculumTree() })
+
+export const registrationPlanQuery = (studentId?: string) =>
+	queryOptions({
+		queryKey: ['registration-plan', studentId ?? null],
+		queryFn: () => getRegistrationPlan({ data: studentId }),
+	})
 
 export const curriculumGroupTreeQuery = (curriculumId: number) =>
 	queryOptions({

@@ -23,6 +23,7 @@ const TABS = [
 	{ to: '/my-subjects/transcript', label: 'Transcript' },
 	{ to: '/my-subjects/progress', label: 'ความก้าวหน้าหลักสูตร' },
 	{ to: '/my-subjects/grades', label: 'คำนวณเกรด' },
+	{ to: '/my-subjects/plan', label: 'แนะนำลงทะเบียน' },
 ] as const
 
 function MySubjectsLayout() {

@@ -24,6 +24,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as SubjectsSubjectIdRouteImport } from './routes/subjects/$subjectId'
 import { Route as MySubjectsTranscriptRouteImport } from './routes/my-subjects/transcript'
 import { Route as MySubjectsProgressRouteImport } from './routes/my-subjects/progress'
+import { Route as MySubjectsPlanRouteImport } from './routes/my-subjects/plan'
 import { Route as MySubjectsGradesRouteImport } from './routes/my-subjects/grades'
 import { Route as AdminProgramsRouteImport } from './routes/admin/programs'
 import { Route as AdminFacultiesRouteImport } from './routes/admin/faculties'
@@ -107,6 +108,11 @@ const MySubjectsProgressRoute = MySubjectsProgressRouteImport.update({
   path: '/progress',
   getParentRoute: () => MySubjectsRoute,
 } as any)
+const MySubjectsPlanRoute = MySubjectsPlanRouteImport.update({
+  id: '/plan',
+  path: '/plan',
+  getParentRoute: () => MySubjectsRoute,
+} as any)
 const MySubjectsGradesRoute = MySubjectsGradesRouteImport.update({
   id: '/grades',
   path: '/grades',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/admin/faculties': typeof AdminFacultiesRoute
   '/admin/programs': typeof AdminProgramsRoute
   '/my-subjects/grades': typeof MySubjectsGradesRoute
+  '/my-subjects/plan': typeof MySubjectsPlanRoute
   '/my-subjects/progress': typeof MySubjectsProgressRoute
   '/my-subjects/transcript': typeof MySubjectsTranscriptRoute
   '/subjects/$subjectId': typeof SubjectsSubjectIdRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/admin/faculties': typeof AdminFacultiesRoute
   '/admin/programs': typeof AdminProgramsRoute
   '/my-subjects/grades': typeof MySubjectsGradesRoute
+  '/my-subjects/plan': typeof MySubjectsPlanRoute
   '/my-subjects/progress': typeof MySubjectsProgressRoute
   '/my-subjects/transcript': typeof MySubjectsTranscriptRoute
   '/subjects/$subjectId': typeof SubjectsSubjectIdRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/admin/faculties': typeof AdminFacultiesRoute
   '/admin/programs': typeof AdminProgramsRoute
   '/my-subjects/grades': typeof MySubjectsGradesRoute
+  '/my-subjects/plan': typeof MySubjectsPlanRoute
   '/my-subjects/progress': typeof MySubjectsProgressRoute
   '/my-subjects/transcript': typeof MySubjectsTranscriptRoute
   '/subjects/$subjectId': typeof SubjectsSubjectIdRoute
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | '/admin/faculties'
     | '/admin/programs'
     | '/my-subjects/grades'
+    | '/my-subjects/plan'
     | '/my-subjects/progress'
     | '/my-subjects/transcript'
     | '/subjects/$subjectId'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/admin/faculties'
     | '/admin/programs'
     | '/my-subjects/grades'
+    | '/my-subjects/plan'
     | '/my-subjects/progress'
     | '/my-subjects/transcript'
     | '/subjects/$subjectId'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/admin/faculties'
     | '/admin/programs'
     | '/my-subjects/grades'
+    | '/my-subjects/plan'
     | '/my-subjects/progress'
     | '/my-subjects/transcript'
     | '/subjects/$subjectId'
@@ -418,6 +430,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MySubjectsProgressRouteImport
       parentRoute: typeof MySubjectsRoute
     }
+    '/my-subjects/plan': {
+      id: '/my-subjects/plan'
+      path: '/plan'
+      fullPath: '/my-subjects/plan'
+      preLoaderRoute: typeof MySubjectsPlanRouteImport
+      parentRoute: typeof MySubjectsRoute
+    }
     '/my-subjects/grades': {
       id: '/my-subjects/grades'
       path: '/grades'
@@ -472,6 +491,7 @@ declare module '@tanstack/react-router' {
 
 interface MySubjectsRouteChildren {
   MySubjectsGradesRoute: typeof MySubjectsGradesRoute
+  MySubjectsPlanRoute: typeof MySubjectsPlanRoute
   MySubjectsProgressRoute: typeof MySubjectsProgressRoute
   MySubjectsTranscriptRoute: typeof MySubjectsTranscriptRoute
   MySubjectsIndexRoute: typeof MySubjectsIndexRoute
@@ -479,6 +499,7 @@ interface MySubjectsRouteChildren {
 
 const MySubjectsRouteChildren: MySubjectsRouteChildren = {
   MySubjectsGradesRoute: MySubjectsGradesRoute,
+  MySubjectsPlanRoute: MySubjectsPlanRoute,
   MySubjectsProgressRoute: MySubjectsProgressRoute,
   MySubjectsTranscriptRoute: MySubjectsTranscriptRoute,
   MySubjectsIndexRoute: MySubjectsIndexRoute,
