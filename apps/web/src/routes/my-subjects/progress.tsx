@@ -93,6 +93,18 @@ function detectClashes(scheds: SubjectSchedule[]): Clash[] {
 	return out
 }
 
+/** When a clash happens (day-time for class, exam date for exam). */
+function clashWhen(c: Clash): string {
+	if (c.type === 'class') {
+		const day = c.a.day ? DAY_ABBR[c.a.day] : ''
+		return `${day} ${hhmm(c.a.timeStart)}-${hhmm(c.a.timeEnd)}`.trim()
+	}
+	if (c.a.examFinal && c.a.examFinal === c.b.examFinal) return `Final ${c.a.examFinal.slice(0, 16)}`
+	if (c.a.examMidterm && c.a.examMidterm === c.b.examMidterm)
+		return `Midterm ${c.a.examMidterm.slice(0, 16)}`
+	return ''
+}
+
 function ProgressView({
 	details,
 	tree,
@@ -284,11 +296,11 @@ function ProgressView({
 		return m
 	}, [projected])
 
-	// Class-time / exam clashes among the subjects to register this term
-	// (registrar plan + free-elective picks).
+	// Class-time / exam clashes among EVERYTHING the student plans to register this
+	// term — the full simulation set (plan + ticked group subjects + free picks).
 	const toRegister = useMemo(
-		() => [...new Set([...recommended, ...freePicks.keys()])].filter((id) => !takenSet.has(id)),
-		[recommended, freePicks, takenSet],
+		() => [...simulated].filter((id) => !takenSet.has(id)),
+		[simulated, takenSet],
 	)
 	const { data: schedules } = useQuery({
 		...subjectSchedulesQuery(toRegister),
@@ -378,7 +390,10 @@ function ProgressView({
 								<ul className="mt-1 space-y-0.5">
 									{clashes.map((c) => (
 										<li key={`${c.a.subjectId}-${c.b.subjectId}-${c.type}`}>
-											{c.type === 'exam' ? 'สอบทับ' : 'เวลาเรียนทับ'}: {nameOf(c.a.subjectId ?? '')} ↔{' '}
+											<span className="font-medium">
+												{c.type === 'exam' ? 'สอบทับ' : 'เวลาเรียนทับ'}
+											</span>
+											{clashWhen(c) ? ` (${clashWhen(c)})` : ''}: {nameOf(c.a.subjectId ?? '')} ↔{' '}
 											{nameOf(c.b.subjectId ?? '')}
 										</li>
 									))}
