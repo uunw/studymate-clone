@@ -13,6 +13,26 @@ export default defineConfig({
 	resolve: {
 		alias: { '~': fileURLToPath(new URL('./src', import.meta.url)) },
 	},
+	build: {
+		rollupOptions: {
+			output: {
+				// Split the heavy, rarely-changing vendors into their own long-cached
+				// chunks (app code changes far more often). pdfjs (unpdf) is left alone
+				// — it's already a lazy async chunk via the dynamic import in
+				// server/transcript.ts, and must stay that way.
+				manualChunks(id) {
+					if (!id.includes('node_modules')) return
+					if (/[\\/](firebase|@firebase|@grpc|protobufjs|idb)[\\/]/.test(id)) return 'firebase'
+					if (/[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+					if (id.includes('@tanstack')) return 'tanstack'
+				},
+			},
+		},
+		// Keeps the eager vendor chunks (firebase ~333kB the largest) under the
+		// warning. The lazy pdfjs (unpdf) chunk still trips it — that's expected and
+		// fine: it only loads on transcript upload, never on first paint.
+		chunkSizeWarningLimit: 700,
+	},
 	plugins: [
 		tailwindcss(),
 		// tanstackRouter() generates routeTree.gen.ts; must precede viteReact().
