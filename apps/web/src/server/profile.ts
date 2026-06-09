@@ -1,55 +1,18 @@
-import { profileSchema, selectCurriculumSchema } from '@repo/core/schemas'
-import { db, eq, schema } from '@repo/db'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn } from '~/lib/server-fn'
 
+// TODO(phase 4): persist to Firestore users/{uid}. No-ops for now.
 export const updateProfile = createServerFn({ method: 'POST' })
-	.inputValidator(profileSchema)
-	.handler(async ({ data }) => {
-		const { requireUser } = await import('./auth.server')
-		const user = await requireUser()
-		await db
-			.update(schema.user)
-			.set({
-				firstName: data.firstName,
-				lastName: data.lastName,
-				nickname: data.nickname,
-				name: `${data.firstName} ${data.lastName}`,
-				updatedAt: new Date(),
-			})
-			.where(eq(schema.user.id, user.id))
-		return { ok: true }
-	})
+	.inputValidator((d: unknown) => d)
+	.handler(async (): Promise<{ ok: true }> => ({ ok: true }))
 
 export const updateAvatar = createServerFn({ method: 'POST' })
 	.inputValidator((image: string) => image)
-	.handler(async ({ data: image }) => {
-		const { requireUser } = await import('./auth.server')
-		const user = await requireUser()
-		await db
-			.update(schema.user)
-			.set({ image, updatedAt: new Date() })
-			.where(eq(schema.user.id, user.id))
-		return { ok: true }
-	})
+	.handler(async (): Promise<{ ok: true }> => ({ ok: true }))
 
 export const selectCurriculum = createServerFn({ method: 'POST' })
-	.inputValidator(selectCurriculumSchema)
-	.handler(async ({ data }) => {
-		const { requireUser } = await import('./auth.server')
-		const user = await requireUser()
-		await db
-			.update(schema.user)
-			.set({ curriculumId: data.curriculumId, updatedAt: new Date() })
-			.where(eq(schema.user.id, user.id))
-		return { ok: true }
-	})
+	.inputValidator((d: unknown) => d)
+	.handler(async (): Promise<{ ok: true }> => ({ ok: true }))
 
-export const acceptPolicy = createServerFn({ method: 'POST' }).handler(async () => {
-	const { requireUser } = await import('./auth.server')
-	const user = await requireUser()
-	await db
-		.update(schema.user)
-		.set({ policyViewed: true, updatedAt: new Date() })
-		.where(eq(schema.user.id, user.id))
-	return { ok: true }
-})
+export const acceptPolicy = createServerFn({ method: 'POST' }).handler(
+	async (): Promise<{ ok: true }> => ({ ok: true }),
+)

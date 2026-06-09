@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start'
+import { auth } from '~/lib/firebase'
 
 export type SessionUser = {
 	id: string
@@ -15,10 +15,31 @@ export type SessionUser = {
 }
 
 /**
- * Current session for the request. The `./auth.server` import is referenced only
- * inside this handler, so the client build strips it (and better-auth/drizzle/pg).
+ * Current user from Firebase Auth, mapped to the app's SessionUser shape. The
+ * 8-digit student id is the @kmitl.ac.th email local-part; the real name comes
+ * from Google. TODO(phase 4): merge the Firestore users/{uid} profile doc
+ * (curriculumId, isAdmin, nickname, policyViewed).
  */
-export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () => {
-	const { readUser } = await import('./auth.server')
-	return readUser()
-})
+export async function getSessionUser(): Promise<SessionUser | null> {
+	await auth.authStateReady()
+	const u = auth.currentUser
+	const email = u?.email ?? ''
+	if (!u || !email.toLowerCase().endsWith('@kmitl.ac.th')) return null
+	const local = email.split('@')[0] ?? ''
+	const studentId = /^\d{8}$/.test(local) ? local : null
+	const display = u.displayName ?? ''
+	const [firstName, ...rest] = display.split(' ')
+	return {
+		id: u.uid,
+		email,
+		username: studentId,
+		name: display || local,
+		firstName: firstName || null,
+		lastName: rest.join(' ') || null,
+		nickname: display || null,
+		image: u.photoURL ?? null,
+		isAdmin: false,
+		curriculumId: null,
+		policyViewed: false,
+	}
+}

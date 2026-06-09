@@ -1,8 +1,8 @@
 import {
+	signOut as fbSignOut,
 	GoogleAuthProvider,
 	onAuthStateChanged,
 	signInWithPopup,
-	signOut as fbSignOut,
 	type User,
 } from 'firebase/auth'
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react'

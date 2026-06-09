@@ -12,6 +12,7 @@ export type {
 	SubjectClass,
 	SubjectReview,
 	Teachtable,
+	Transcript,
 	TranscriptDetail,
 	User,
 } from './types'
