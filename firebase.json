@@ -2,8 +2,21 @@
 	"hosting": {
 		"public": "apps/web/dist",
 		"ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+		"predeploy": ["pnpm --filter web build"],
 		"rewrites": [{ "source": "**", "destination": "/index.html" }],
-		"cleanUrls": true
+		"cleanUrls": true,
+		"headers": [
+			{
+				"source": "/assets/**",
+				"headers": [
+					{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+				]
+			},
+			{
+				"source": "/index.html",
+				"headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+			}
+		]
 	},
 	"firestore": {
 		"rules": "firestore.rules",
