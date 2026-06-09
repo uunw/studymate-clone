@@ -34,12 +34,13 @@ service cloud.firestore {
 
     match /subjects/{id} {
       allow read: if true;
-      // TODO(phase 4/5): review aggregates (ratingSum/reviewCount/ratingAvg) are
-      // denormalized here. Without Cloud Functions they must be updated by the
-      // client review transaction — replace this admin-only write with a
-      // field-scoped rule (allow updating ONLY the aggregate fields by a kmitl
-      // user), or compute counts via Firestore aggregation queries instead.
       allow write: if isAdmin();
+      // Review aggregate denormalization (no Cloud Functions): any verified KMITL
+      // user may update ONLY {ratingAvg, reviewCount}, which server/reviews.ts
+      // recomputes from the reviews. Trust caveat: a client could write a wrong
+      // aggregate; the authoritative reviews themselves stay author-gated.
+      allow update: if kmitl()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingAvg', 'reviewCount']);
     }
 
     // ---- Reviews: public read; authored writes; rating bounded ----
@@ -51,6 +52,10 @@ service cloud.firestore {
         && request.resource.data.rating >= 1
         && request.resource.data.rating <= 5;
       allow update, delete: if kmitl() && resource.data.authorUid == request.auth.uid;
+      // Any verified KMITL user may bump ONLY likeCount (toggle like), recomputed
+      // by server/reviews.ts from the likes subcollection.
+      allow update: if kmitl()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']);
 
       match /likes/{uid} {
         allow read: if true;

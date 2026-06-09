@@ -1,6 +1,21 @@
-import { collection, getDocs, query, Timestamp, where } from 'firebase/firestore'
-import { db } from '~/lib/firebase'
+import { reviewSchema } from '@repo/core/schemas'
+import {
+	collection,
+	deleteDoc,
+	doc,
+	getDoc,
+	getDocs,
+	query,
+	serverTimestamp,
+	setDoc,
+	Timestamp,
+	updateDoc,
+	where,
+} from 'firebase/firestore'
+import type { Detail } from '~/components/my-subjects-types'
+import { auth, db } from '~/lib/firebase'
 import { createServerFn } from '~/lib/server-fn'
+import { currentUid, requireUid } from './session'
 
 type ReviewDoc = {
 	id: number
@@ -124,29 +139,111 @@ export const listCurriculumReviews = createServerFn({ method: 'GET' }).handler(
 	async (): Promise<FeedReview[]> => [],
 )
 
-// TODO(phase 4c): real eligibility (needs the user's transcript in Firestore).
+/** Eligible to review = signed in, has a transcript, and passed this subject. */
 export const getReviewEligibility = createServerFn({ method: 'GET' })
 	.inputValidator((id: string) => id)
 	.handler(
-		async (): Promise<{ signedIn: boolean; hasTranscript: boolean; completed: boolean }> => ({
-			signedIn: false,
-			hasTranscript: false,
-			completed: false,
-		}),
+		async (ctx): Promise<{ signedIn: boolean; hasTranscript: boolean; completed: boolean }> => {
+			const subjectId = ctx.data as string
+			const uid = currentUid()
+			if (!uid) return { signedIn: false, hasTranscript: false, completed: false }
+			const snap = await getDoc(doc(db, 'users', uid, 'private', 'transcript'))
+			if (!snap.exists()) return { signedIn: true, hasTranscript: false, completed: false }
+			const details = (snap.data().details as Detail[]) ?? []
+			const completed = details.some((d) => {
+				const g = (d.grade ?? '').toUpperCase().trim()
+				return d.subjectId === subjectId && g !== '' && !['F', 'U', 'W', 'X'].includes(g)
+			})
+			return { signedIn: true, hasTranscript: true, completed }
+		},
 	)
 
-// TODO(phase 4c): writes (needs auth + a field-scoped rule for the subject
-// rating aggregate / review likeCount, since there are no Cloud Functions).
+// Recompute the subject's rating aggregate from its reviews. There are no Cloud
+// Functions, so the client writes it; firestore.rules lets a kmitl user update
+// ONLY {ratingAvg, reviewCount} on a subject (trust caveat documented there).
+async function recomputeSubjectAggregate(subjectId: string) {
+	const snap = await getDocs(query(collection(db, 'reviews'), where('subjectId', '==', subjectId)))
+	const ratings = snap.docs
+		.map((d) => (d.data() as ReviewDoc).rating)
+		.filter((n): n is number => typeof n === 'number')
+	const reviewCount = ratings.length
+	const ratingAvg = reviewCount ? ratings.reduce((a, b) => a + b, 0) / reviewCount : 0
+	await updateDoc(doc(db, 'subjects', subjectId), { ratingAvg, reviewCount })
+}
+
+/** Create or replace the signed-in user's review for a (subject, year, term). */
 export const upsertReview = createServerFn({ method: 'POST' })
 	.inputValidator((d: unknown) => d)
-	.handler(async (): Promise<undefined> => undefined)
+	.handler(async (ctx): Promise<{ id: number }> => {
+		const uid = requireUid()
+		const data = reviewSchema.parse(ctx.data)
+
+		// One review per (user, subject, year, term): drop the old, write fresh.
+		const mine = await getDocs(
+			query(collection(db, 'reviews'), where('subjectId', '==', data.subjectId)),
+		)
+		for (const d of mine.docs) {
+			const r = d.data() as ReviewDoc
+			if (r.authorUid === uid && r.year === data.year && r.term === data.term)
+				await deleteDoc(d.ref)
+		}
+
+		const [subjSnap, profileSnap] = await Promise.all([
+			getDoc(doc(db, 'subjects', data.subjectId)),
+			getDoc(doc(db, 'users', uid)),
+		])
+		const subjectNameTh = subjSnap.exists() ? (subjSnap.data().nameTh ?? null) : null
+		const nickname = profileSnap.exists() ? (profileSnap.data().nickname ?? null) : null
+		const display = auth.currentUser?.displayName ?? null
+
+		const id = Date.now()
+		await setDoc(doc(db, 'reviews', String(id)), {
+			id,
+			subjectId: data.subjectId,
+			subjectNameTh,
+			authorUid: uid,
+			authorNickname: nickname ?? display,
+			authorName: display,
+			rating: data.rating,
+			review: data.review,
+			likeCount: 0,
+			createdAt: serverTimestamp(),
+			year: data.year,
+			term: data.term,
+		})
+		await recomputeSubjectAggregate(data.subjectId)
+		return { id }
+	})
 
 export const deleteReview = createServerFn({ method: 'POST' })
 	.inputValidator((reviewId: number) => reviewId)
-	.handler(async (): Promise<{ ok: true }> => ({ ok: true }))
+	.handler(async (ctx): Promise<{ ok: true }> => {
+		requireUid()
+		const ref = doc(db, 'reviews', String(ctx.data as number))
+		const snap = await getDoc(ref)
+		if (!snap.exists()) return { ok: true }
+		const subjectId = (snap.data() as ReviewDoc).subjectId
+		await deleteDoc(ref) // rules: only the author may delete
+		await recomputeSubjectAggregate(subjectId)
+		return { ok: true }
+	})
 
+/** Toggle a like for the signed-in user; returns the new like count. */
 export const toggleLike = createServerFn({ method: 'POST' })
 	.inputValidator((d: unknown) => d)
-	.handler(
-		async (): Promise<{ liked: boolean; likeCount: number }> => ({ liked: false, likeCount: 0 }),
-	)
+	.handler(async (ctx): Promise<{ liked: boolean; likeCount: number }> => {
+		const uid = requireUid()
+		const reviewId = String((ctx.data as { reviewId: number }).reviewId)
+		const reviewRef = doc(db, 'reviews', reviewId)
+		const likeRef = doc(db, 'reviews', reviewId, 'likes', uid)
+
+		const likeSnap = await getDoc(likeRef)
+		const liking = !likeSnap.exists()
+		if (liking) await setDoc(likeRef, { createdAt: serverTimestamp() })
+		else await deleteDoc(likeRef)
+
+		const likes = await getDocs(collection(db, 'reviews', reviewId, 'likes'))
+		const likeCount = likes.size
+		await updateDoc(reviewRef, { likeCount }) // rules: kmitl may update only likeCount
+		return { liked: liking, likeCount }
+	})
