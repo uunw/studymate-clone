@@ -58,8 +58,8 @@ function currentTtId(tts: Teachtable[]): number {
 /**
  * Paginated subject list. The catalog (~750 docs) is fetched once and filtered
  * client-side — Firestore has no substring search. TODO(perf): denormalized
- * query fields / a search service if the catalog grows.
- * TODO(phase 4b): curriculum-group / faculty / department filters.
+ * query fields / a search service if the catalog grows. (facultyId/departmentId
+ * filters exist in the schema but aren't surfaced on this page.)
  */
 export const listSubjects = createServerFn({ method: 'GET' })
 	.inputValidator((d: unknown) => d)
@@ -93,6 +93,21 @@ export const listSubjects = createServerFn({ method: 'GET' })
 			if (data.day) rows = rows.filter((s) => (s.offeredDays ?? []).includes(data.day as number))
 			if (data.minRating)
 				rows = rows.filter((s) => (s.ratingAvg ?? 0) >= (data.minRating as number))
+
+			// Curriculum-group filter (checkbox tree): keep subjects linked to the
+			// selected group nodes, resolved from curricula/{curriculumId}.tree.
+			if (data.groupIds?.length && data.curriculumId) {
+				const snap = await getDoc(doc(db, 'curricula', String(data.curriculumId)))
+				const tree = snap.exists() ? (snap.data() as { tree?: StoredTreeNode | null }).tree : null
+				const wanted = new Set(data.groupIds)
+				const subjectIds = new Set<string>()
+				const walk = (n: StoredTreeNode) => {
+					if (wanted.has(n.id)) for (const s of n.subjects) subjectIds.add(s.id)
+					for (const c of n.children) walk(c)
+				}
+				if (tree) walk(tree)
+				rows = rows.filter((s) => subjectIds.has(s.id))
+			}
 
 			rows.sort((a, b) => a.id.localeCompare(b.id))
 			const total = rows.length

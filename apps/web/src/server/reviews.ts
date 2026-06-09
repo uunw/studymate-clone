@@ -15,7 +15,7 @@ import {
 import type { Detail } from '~/components/my-subjects-types'
 import { auth, db } from '~/lib/firebase'
 import { createServerFn } from '~/lib/server-fn'
-import { currentUid, requireUid } from './session'
+import { currentUid, getSessionUser, requireUid } from './session'
 
 type ReviewDoc = {
 	id: number
@@ -134,9 +134,30 @@ export const listReviews = createServerFn({ method: 'GET' })
 		return rows.slice(0, data.limit ?? 50).map(toFeed)
 	})
 
-// TODO(phase 4c): reviews for subjects in the signed-in user's curriculum tree.
+// Reviews for subjects in the signed-in user's curriculum tree (the "หลักสูตรของฉัน"
+// feed tab). Reviews are few, so fetch + filter client-side.
+type TreeWalkNode = { subjects: { id: string }[]; children: TreeWalkNode[] }
 export const listCurriculumReviews = createServerFn({ method: 'GET' }).handler(
-	async (): Promise<FeedReview[]> => [],
+	async (): Promise<FeedReview[]> => {
+		const user = await getSessionUser()
+		if (!user?.curriculumId) return []
+		const cSnap = await getDoc(doc(db, 'curricula', String(user.curriculumId)))
+		const tree = cSnap.exists() ? (cSnap.data() as { tree?: TreeWalkNode | null }).tree : null
+		if (!tree) return []
+		const ids = new Set<string>()
+		const walk = (n: TreeWalkNode) => {
+			for (const s of n.subjects) ids.add(s.id)
+			for (const c of n.children) walk(c)
+		}
+		walk(tree)
+		if (!ids.size) return []
+		const snap = await getDocs(collection(db, 'reviews'))
+		return snap.docs
+			.map((d) => d.data() as ReviewDoc)
+			.filter((r) => ids.has(r.subjectId))
+			.sort(byNewest)
+			.map(toFeed)
+	},
 )
 
 /** Eligible to review = signed in, has a transcript, and passed this subject. */
