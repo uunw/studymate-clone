@@ -5,64 +5,87 @@ Turborepo + pnpm monorepo. Public: github.com/uunw/studymate-clone.
 Inspired-by clone; original (kmitl-savvy-students, Angular+ASP.NET) cloud went down.
 
 ## Stack
-TanStack Start v1 (SSR, file routes, server fns) · React 19 · TanStack Query/Form ·
-Drizzle + Postgres (Neon in prod) · Better Auth (KMITL SSO) · Tailwind v4 ·
-Remeda · date-fns · Biome · Vitest.
+The running app is a **pure client SPA**: TanStack Router v1 (file routes, no SSR) · React 19 ·
+TanStack Query/Form · **Firestore** (client SDK; Security Rules ARE the authz layer) · **Firebase
+Auth** (Google, hd=kmitl.ac.th) · Tailwind v4 · date-fns · Biome · Vitest. Static Vite build →
+**Firebase Hosting**. packages/db keeps Drizzle + Postgres as the **seed SOURCE only** (migrated
+into Firestore by seed-firestore); the app never touches Postgres at runtime. (History: was
+TanStack Start SSR / Neon / Better Auth — see MIGRATION.md + the migration session-log entry.)
 
 ## Layout
-- apps/web — TanStack Start app
-- packages/db — Drizzle schema + migrations + seed (@repo/db)
-- packages/auth — Better Auth, KMITL SSO (@repo/auth)
-- packages/core — Zod schemas, transcript PDF parser, GPA utils (@repo/core)
+- apps/web — TanStack Router SPA. server/*.ts are CLIENT modules (Firestore reads/writes +
+  registrar fetches) behind a thin createServerFn shim (lib/server-fn.ts) so call sites and
+  ~/queries stayed unchanged. lib/firebase.ts exports app/auth/db.
+- packages/db — Drizzle schema + the Postgres→Firestore seed (@repo/db). Row types are reused
+  in the client via `import type` (erased at build → no Drizzle/pg in the bundle).
+- packages/core — Zod schemas, transcript PDF parser (unpdf), GPA/progress (allocateProgress),
+  eligibility (isSectionOpenToStudent).
+- packages/auth — Better Auth (LEGACY; unused by the SPA, kept for reference).
 - packages/ui + packages/tailwind-config
 
 ## Runbook
-    pnpm install && cp .env.example .env
-    docker compose up -d            # local Postgres :5432
-    pnpm db:migrate && pnpm db:seed # academic reference data
-    pnpm dev                        # :3000
+    pnpm install && cp .env.example .env          # set VITE_FIREBASE_* (public) + DATABASE_URL
+    docker compose up -d                          # local Postgres :5432 (seed source)
+    pnpm db:migrate && pnpm db:seed               # academic reference data → Postgres
+    pnpm --filter @repo/db seed:firestore         # Postgres → Firestore (+ curricula/{id}.tree)
+    pnpm --filter @repo/db seed:reviews           # demo reviews — run AFTER seed:firestore
+    pnpm dev                                      # SPA :3000
+    firebase deploy --only hosting                # build + publish → studymate-kmitl.web.app
 Verify chain (= CI): pnpm lint · pnpm typecheck · pnpm test · pnpm build
+Firebase project: studymate-kmitl (asia-southeast1). .firebase-admin-key.json (gitignored) is the
+service-account key the seed scripts use. Firebase web config (VITE_FIREBASE_*) is public.
 
-## Auth — KMITL SSO (+ email/password fallback)
-Better Auth genericOAuth, generic OIDC provider id `kmitl`. Email+password and `username`
-(8-digit student id) login also work as a fallback. Callback: /api/auth/oauth2/callback/kmitl.
-Working endpoint = the registrar realm: ISSUER https://sso.reg.kmitl.ac.th/realms/registrar,
-CLIENT_ID `KMITL-client` — a PUBLIC client (PKCE, no secret; `ssoEnabled` needs only id +
-issuer). The id_token carries the student id as `preferred_username` (deriveUsername picks it
-up; KMITL_SSO_STUDENT_ID_CLAIM optional). Grant admin: UPDATE "user" SET is_admin=true.
+## Auth — Firebase (Google, @kmitl.ac.th)
+Firebase Auth, Google provider restricted to the kmitl.ac.th domain (hd param + a client check +
+the rule `email_verified && email ~ @kmitl.ac.th`). The 8-digit student id = the email local-part
+(64010001@kmitl.ac.th). server/session.ts maps currentUser → SessionUser, merging the users/{uid}
+profile (curriculumId, nickname, policyViewed). **isAdmin comes from an admins/{uid} marker doc**
+(NOT the self-writable profile) — grant admin = create admins/{uid}. Must enable the Google
+provider in the Firebase console once per project (Authentication → Sign-in method).
+
+## Firestore data model
+Reference data (public-read, admin-write): faculties / departments / programs / curricula /
+subjects / sections / teachtables. subjects carry denormalized fields (ratingAvg, reviewCount,
+searchTokens, offeredDays, openSections). **curricula/{id}.tree** = the curriculum_group graph
+denormalized as one ProgressGroupInput tree (feeds allocateProgress + the admin tree read).
+Per-user (owner-only): users/{uid} (profile) + users/{uid}/private/{plan,transcript}. reviews
+(public-read, author-write) + reviews/{id}/likes/{uid}. Role marker: admins/{uid}.
 
 ## Known landmines
-- Server-only deps (Drizzle/Better Auth/pg) leak into the CLIENT bundle unless every
-  @repo/db / @repo/auth/server import is used ONLY inside a createServerFn `.handler()`.
-  Isolate helpers in `*.server.ts`, dynamic-import inside handlers; ssr.external the heavy
-  deps in vite.config. Symptom: rollup chokes on better-auth's kysely bun-sqlite dialect.
-- vite.config loadEnv→process.env so server code sees DATABASE_URL etc. in dev.
-- routeTree.gen.ts is stale until `vite build`; tsc lies about route paths until regen.
-- Student id: the registrar realm returns it as `preferred_username` with plain
-  `openid profile email` scopes (no special claim). The old developer-hub / realms/master
-  client did NOT — it needed a KDMC-granted claim.
-- KMITL SSO: self-registered Developer-Hub clients on /realms/master returned "Client not
-  found" (provisioning gap, see second-brain wiki concepts/kmitl-sso) — UNBLOCKED by using the
-  registrar realm's public `KMITL-client` (sso.reg.kmitl.ac.th/realms/registrar).
-- genericOAuth requires a non-empty `name`, but the registrar id_token omits name/given_name/
-  family_name → mapProfileToUser must fall back with `||` (NOT `??`, which keeps the empty
-  string) or sign-in dies as "Unable to get user info" → name_is_missing.
-- Dev OAuth callback over http breaks when the browser force-upgrades localhost→https (HSTS /
-  "always use secure connections"). vite.config serves TLS when apps/web/certs/ holds a
-  self-signed cert; set BETTER_AUTH_URL to the SAME origin you open (e.g. https://127.0.0.1:3000).
-- Seed user uses username 64010001 (matches its email). A stale DB row squatting on a real
-  student id (e.g. 67015067) blocks that student's first SSO sign-in with "username already
-  taken" — realign/remove the seed row.
-- Build emits dist/ (no node listener) — deploy via Vercel (auto-detects TanStack Start).
+- **Firestore is the ONLY backend — no server, no Cloud Functions.** Aggregates (subject
+  ratingAvg/reviewCount, review likeCount) are denormalized + recomputed CLIENT-side; firestore.
+  rules let a kmitl user update ONLY those fields via `diff().affectedKeys().hasOnly(...)`. The
+  authoritative reviews/likes stay author/owner-gated (trust caveat noted in the rules).
+- Server-only deps (Drizzle/pg/firebase-admin) must NEVER reach the client bundle: reuse @repo/db
+  row types with `import type` (erased), never import @repo/db/client or firebase-admin from
+  apps/web. The seed scripts in packages/db are the only Postgres/admin-SDK consumers.
+- **Re-seed order: seed:firestore THEN seed:reviews** — seed:firestore rewrites every subject
+  with ratingAvg/reviewCount = 0, so seed:reviews must run after to restore the aggregates (it
+  also writes real reviews/{id}/likes docs so likeCount stays consistent with toggleLike).
+- The **registrar API reflects CORS** (access-control-allow-origin: <request origin>), so the SPA
+  fetches get-pattern-subject / get-teach-table-show DIRECTLY from the browser — no proxy needed.
+- routeTree.gen.ts is generated by the tanstackRouter Vite plugin (autoCodeSplitting), stale
+  until a build/dev run; tsc lies about route paths until regen. Don't commit a dev-server-
+  regenerated copy across a branch switch (it'll show as a spurious diff).
+- Admin **curriculum-group editor is READ-ONLY** on Firestore: the writes key off a global group
+  id, but the tree is denormalized in curricula/{id}.tree with no group→curriculum index.
+  getCurriculumGroupTree (read) works; the write fns throw "not supported". A real fix needs a
+  normalized curriculumGroups collection (rebuild the tree on save) or curriculumId in the editor.
+- Bundle: vite.config manualChunks splits firebase/react/tanstack from app code. The unpdf
+  (pdfjs) transcript parser is a LAZY chunk (dynamic import in server/transcript.ts) — keep it
+  dynamically imported so it never loads on first paint.
 - KMITL `teach_day` is 1 = อาทิตย์ … 7 = เสาร์ (NOT 1 = Monday). Day labels/filters use this;
   stored values are already in KMITL numbering — don't shift them.
-- Registrar teach-table (get-teach-table-show by_class) uses NUMERIC codes (faculty 01 /
-  dept 05 / curriculum 101), distinct from the seeded program/dept kmitlId ('010102'/'0101').
-  Stored on curriculum.reg{Faculty,Department,Curriculum}Id. The free-elective list = the
-  registrar's curated per-curriculum "กลุ่ม 1 (GenEd/เลือกเสรี)" group (class_year derived from
-  the 8-digit student id), NOT catalog-wide filtering.
+- Registrar teach-table (get-teach-table-show by_class) uses NUMERIC codes (faculty 01 / dept 05
+  / curriculum 101), distinct from the seeded program/dept kmitlId ('010102'/'0101'). Stored on
+  curricula.reg{Faculty,Department,Curriculum}Id. The free-elective list = the registrar's
+  curated per-curriculum "กลุ่ม 1 (GenEd/เลือกเสรี)" group (class_year from the 8-digit id), NOT
+  catalog-wide filtering.
 - Free electives are gated by เงื่อนไข (subject_class.rule_th): student-id range/set + major/
   faculty; @repo/core/eligibility.isSectionOpenToStudent parses it.
+- LEGACY (pre-migration, no longer in the running app but preserved in git + second-brain wiki
+  concepts/kmitl-sso): KMITL Keycloak SSO via Better Auth genericOAuth (registrar realm public
+  PKCE client, student id = preferred_username). Replaced by Firebase Google auth.
 
 ## Recent session log
 ### 2026-06-09 (cont.) — SPA + Firestore migration (branch migrate/firebase-spa)
