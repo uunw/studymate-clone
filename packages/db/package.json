@@ -15,6 +15,7 @@
 		"studio": "drizzle-kit studio",
 		"seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
 		"seed:firestore": "tsx --env-file-if-exists=../../.env src/seed-firestore.ts",
+		"seed:reviews": "tsx --env-file-if-exists=../../.env src/seed-reviews-firestore.ts",
 		"seed:ce": "tsx --env-file-if-exists=../../.env src/seed-ce-curriculum.ts",
 		"import:regis": "tsx --env-file-if-exists=../../.env src/import-regis.ts",
 		"typecheck": "tsc --noEmit",

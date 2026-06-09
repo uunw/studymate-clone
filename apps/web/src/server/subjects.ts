@@ -1,6 +1,6 @@
 import type { SubjectFilter } from '@repo/core/schemas'
-import type { Subject } from '@repo/db'
-import { collection, getDocs } from 'firebase/firestore'
+import type { Subject, SubjectClass, Teachtable } from '@repo/db'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '~/lib/firebase'
 import { createServerFn } from '~/lib/server-fn'
 
@@ -19,6 +19,18 @@ type SubjectListItem = Pick<Subject, 'id' | 'nameTh' | 'nameEn' | 'credit'> & {
 	reviewCount: number
 	openSections: number
 	ruleTh: string | null
+}
+
+async function allSections(): Promise<SubjectClass[]> {
+	const snap = await getDocs(collection(db, 'sections'))
+	return snap.docs.map((d) => d.data() as SubjectClass)
+}
+async function teachtables(): Promise<Teachtable[]> {
+	const snap = await getDocs(collection(db, 'teachtables'))
+	return snap.docs.map((d) => d.data() as Teachtable)
+}
+function currentTtId(tts: Teachtable[]): number {
+	return [...tts].sort((a, b) => b.year - a.year || b.term - a.term)[0]?.id ?? -1
 }
 
 /**
@@ -79,9 +91,11 @@ export const listSubjects = createServerFn({ method: 'GET' })
 
 export const getSubject = createServerFn({ method: 'GET' })
 	.inputValidator((id: string) => id)
-	.handler(async (): Promise<Subject & { rating: number; reviewCount: number }> => {
-		// TODO(phase 4b): Firestore doc read.
-		throw new Error('NOT_FOUND')
+	.handler(async (ctx): Promise<Subject & { rating: number; reviewCount: number }> => {
+		const snap = await getDoc(doc(db, 'subjects', ctx.data as string))
+		if (!snap.exists()) throw new Error('NOT_FOUND')
+		const s = snap.data() as StoredSubject
+		return { ...s, rating: s.ratingAvg ?? 0, reviewCount: s.reviewCount ?? 0 }
 	})
 
 export type GroupOption = {
@@ -136,9 +150,31 @@ export type SubjectSchedule = {
 	examFinal: string | null
 	ruleTh: string | null
 }
+/** Representative (first) current-term section per subject — for clash detection. */
 export const getSubjectSchedules = createServerFn({ method: 'GET' })
 	.inputValidator((ids: string[]) => ids)
-	.handler(async (): Promise<SubjectSchedule[]> => [])
+	.handler(async (ctx): Promise<SubjectSchedule[]> => {
+		const ids = (ctx.data as string[]) ?? []
+		if (!ids.length) return []
+		const [secs, tts] = await Promise.all([allSections(), teachtables()])
+		const ttId = currentTtId(tts)
+		const bySubj = new Map<string, SubjectSchedule>()
+		for (const sc of secs) {
+			if (sc.teachtableId !== ttId || !sc.subjectId || !ids.includes(sc.subjectId)) continue
+			if (bySubj.has(sc.subjectId)) continue
+			bySubj.set(sc.subjectId, {
+				subjectId: sc.subjectId,
+				section: sc.section,
+				day: sc.day,
+				timeStart: sc.timeStart,
+				timeEnd: sc.timeEnd,
+				examMidterm: sc.examMidterm,
+				examFinal: sc.examFinal,
+				ruleTh: sc.ruleTh,
+			})
+		}
+		return [...bySubj.values()]
+	})
 
 export type OfferedSchedule = {
 	subjectId: string
@@ -149,32 +185,90 @@ export type OfferedSchedule = {
 	capacity: number
 	preCount: number
 }
+/** Current-term offerings per subject (รวม sections) — for the "เปิดสอน" badge. */
 export const listOfferedSchedules = createServerFn({ method: 'GET' }).handler(
-	async (): Promise<OfferedSchedule[]> => [],
+	async (): Promise<OfferedSchedule[]> => {
+		const [secs, tts] = await Promise.all([allSections(), teachtables()])
+		const ttId = currentTtId(tts)
+		const bySubj = new Map<string, OfferedSchedule>()
+		for (const sc of secs) {
+			if (sc.teachtableId !== ttId || !sc.subjectId) continue
+			const e = bySubj.get(sc.subjectId)
+			if (!e) {
+				bySubj.set(sc.subjectId, {
+					subjectId: sc.subjectId,
+					day: sc.day,
+					timeStart: sc.timeStart,
+					timeEnd: sc.timeEnd,
+					sections: 1,
+					capacity: sc.capacity ?? 0,
+					preCount: sc.preCount ?? 0,
+				})
+			} else {
+				e.sections++
+				e.capacity += sc.capacity ?? 0
+				e.preCount += sc.preCount ?? 0
+			}
+		}
+		return [...bySubj.values()]
+	},
 )
 
 export const listTeachtables = createServerFn({ method: 'GET' }).handler(
-	async (): Promise<import('@repo/db').Teachtable[]> => [],
+	async (): Promise<Teachtable[]> =>
+		(await teachtables()).sort((a, b) => b.year - a.year || b.term - a.term),
 )
 
+type Section = Pick<
+	SubjectClass,
+	| 'id'
+	| 'section'
+	| 'lectOrPrac'
+	| 'day'
+	| 'timeStart'
+	| 'timeEnd'
+	| 'room'
+	| 'building'
+	| 'teacherTh'
+	| 'capacity'
+	| 'enrolled'
+	| 'closed'
+> & { year: number | null; term: number | null }
+/** Teach-table sections (offerings) for a subject, newest term first. */
 export const listSectionsForSubject = createServerFn({ method: 'GET' })
 	.inputValidator((id: string) => id)
-	.handler(
-		async (): Promise<
-			(Pick<
-				import('@repo/db').SubjectClass,
-				| 'id'
-				| 'section'
-				| 'lectOrPrac'
-				| 'day'
-				| 'timeStart'
-				| 'timeEnd'
-				| 'room'
-				| 'building'
-				| 'teacherTh'
-				| 'capacity'
-				| 'enrolled'
-				| 'closed'
-			> & { year: number | null; term: number | null })[]
-		> => [],
-	)
+	.handler(async (ctx): Promise<Section[]> => {
+		const subjectId = ctx.data as string
+		const [secSnap, tts] = await Promise.all([
+			getDocs(query(collection(db, 'sections'), where('subjectId', '==', subjectId))),
+			teachtables(),
+		])
+		const ttById = new Map(tts.map((t) => [t.id, t]))
+		return secSnap.docs
+			.map((d) => d.data() as SubjectClass)
+			.map((sc) => {
+				const tt = sc.teachtableId == null ? undefined : ttById.get(sc.teachtableId)
+				return {
+					id: sc.id,
+					section: sc.section,
+					lectOrPrac: sc.lectOrPrac,
+					day: sc.day,
+					timeStart: sc.timeStart,
+					timeEnd: sc.timeEnd,
+					room: sc.room,
+					building: sc.building,
+					teacherTh: sc.teacherTh,
+					capacity: sc.capacity,
+					enrolled: sc.enrolled,
+					closed: sc.closed,
+					year: tt?.year ?? null,
+					term: tt?.term ?? null,
+				}
+			})
+			.sort(
+				(a, b) =>
+					(b.year ?? 0) - (a.year ?? 0) ||
+					(b.term ?? 0) - (a.term ?? 0) ||
+					(a.section ?? '').localeCompare(b.section ?? ''),
+			)
+	})
