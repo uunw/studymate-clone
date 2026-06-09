@@ -34,3 +34,6 @@ packages/db/drizzle/meta/_journal.json.bak
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# local dev TLS cert (self-signed)
+apps/web/certs/

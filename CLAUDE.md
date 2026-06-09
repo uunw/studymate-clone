@@ -25,10 +25,11 @@ Verify chain (= CI): pnpm lint · pnpm typecheck · pnpm test · pnpm build
 
 ## Auth — KMITL SSO (+ email/password fallback)
 Better Auth genericOAuth, generic OIDC provider id `kmitl`. Email+password and `username`
-(8-digit student id) login also work as a fallback while SSO is blocked.
-Env: KMITL_SSO_CLIENT_ID / _SECRET / _ISSUER (https://sso.kmitl.ac.th/realms/master) /
-_STUDENT_ID_CLAIM. Callback: /api/auth/oauth2/callback/kmitl.
-Register client at developer.kmitl.ac.th. Grant admin: UPDATE "user" SET is_admin=true.
+(8-digit student id) login also work as a fallback. Callback: /api/auth/oauth2/callback/kmitl.
+Working endpoint = the registrar realm: ISSUER https://sso.reg.kmitl.ac.th/realms/registrar,
+CLIENT_ID `KMITL-client` — a PUBLIC client (PKCE, no secret; `ssoEnabled` needs only id +
+issuer). The id_token carries the student id as `preferred_username` (deriveUsername picks it
+up; KMITL_SSO_STUDENT_ID_CLAIM optional). Grant admin: UPDATE "user" SET is_admin=true.
 
 ## Known landmines
 - Server-only deps (Drizzle/Better Auth/pg) leak into the CLIENT bundle unless every
@@ -37,9 +38,21 @@ Register client at developer.kmitl.ac.th. Grant admin: UPDATE "user" SET is_admi
   deps in vite.config. Symptom: rollup chokes on better-auth's kysely bun-sqlite dialect.
 - vite.config loadEnv→process.env so server code sees DATABASE_URL etc. in dev.
 - routeTree.gen.ts is stale until `vite build`; tsc lies about route paths until regen.
-- Student id is NOT in default OIDC claims (openid profile email) — special KDMC claim.
-- KMITL SSO: clients created in Developer Hub can show SYNC=done but Keycloak returns
-  "Client not found" (provisioning gap) — see second-brain wiki concepts/kmitl-sso.
+- Student id: the registrar realm returns it as `preferred_username` with plain
+  `openid profile email` scopes (no special claim). The old developer-hub / realms/master
+  client did NOT — it needed a KDMC-granted claim.
+- KMITL SSO: self-registered Developer-Hub clients on /realms/master returned "Client not
+  found" (provisioning gap, see second-brain wiki concepts/kmitl-sso) — UNBLOCKED by using the
+  registrar realm's public `KMITL-client` (sso.reg.kmitl.ac.th/realms/registrar).
+- genericOAuth requires a non-empty `name`, but the registrar id_token omits name/given_name/
+  family_name → mapProfileToUser must fall back with `||` (NOT `??`, which keeps the empty
+  string) or sign-in dies as "Unable to get user info" → name_is_missing.
+- Dev OAuth callback over http breaks when the browser force-upgrades localhost→https (HSTS /
+  "always use secure connections"). vite.config serves TLS when apps/web/certs/ holds a
+  self-signed cert; set BETTER_AUTH_URL to the SAME origin you open (e.g. https://127.0.0.1:3000).
+- Seed user uses username 64010001 (matches its email). A stale DB row squatting on a real
+  student id (e.g. 67015067) blocks that student's first SSO sign-in with "username already
+  taken" — realign/remove the seed row.
 - Build emits dist/ (no node listener) — deploy via Vercel (auto-detects TanStack Start).
 - KMITL `teach_day` is 1 = อาทิตย์ … 7 = เสาร์ (NOT 1 = Monday). Day labels/filters use this;
   stored values are already in KMITL numbering — don't shift them.
@@ -52,6 +65,14 @@ Register client at developer.kmitl.ac.th. Grant admin: UPDATE "user" SET is_admi
   faculty; @repo/core/eligibility.isSectionOpenToStudent parses it.
 
 ## Recent session log
+### 2026-06-09 — KMITL SSO unblocked + mobile-app progress UI + a11y pass
+SSO works end-to-end: switched to the registrar realm public client (`KMITL-client`, PKCE, no
+secret), relaxed `ssoEnabled` (id+issuer only), name fallback in mapProfileToUser (`||` not
+`??`), dev HTTPS in vite (self-signed cert under apps/web/certs/, gitignored) for browsers that
+force https. Verified the full browser flow via Playwright up to the KMITL login; real login
+creates the user (username = preferred_username = student id). Also shipped (commit c4a9fda):
+impeccable a11y/quality pass app-wide (contrast, Select/Switch components, Modal a11y, etc.) +
+mobile app-style /my-subjects/progress (iOS list rows + Switch on mobile, dense table desktop).
 ### 2026-06-08 — feature parity + registration planning
 Migrated all remaining original features; built the /my-subjects registration-planning system:
 registrar pre-reg plan (get-pattern-subject), projected progress (amber) + persisted what-if

@@ -18,11 +18,9 @@ export const KMITL_SSO_PROVIDER_ID = 'kmitl'
  *   KMITL_SSO_ISSUER  (e.g. https://<sso-host>/realms/master — discovery is derived)
  * Register the redirect URI: <BETTER_AUTH_URL>/api/auth/oauth2/callback/kmitl
  */
-const ssoEnabled = !!(
-	process.env.KMITL_SSO_CLIENT_ID &&
-	process.env.KMITL_SSO_CLIENT_SECRET &&
-	process.env.KMITL_SSO_ISSUER
-)
+// Secret is optional: the registrar realm's `KMITL-client` is a public (PKCE)
+// client and ignores client credentials, so only id + issuer are required.
+const ssoEnabled = !!(process.env.KMITL_SSO_CLIENT_ID && process.env.KMITL_SSO_ISSUER)
 const discoveryUrl = process.env.KMITL_SSO_ISSUER
 	? `${process.env.KMITL_SSO_ISSUER.replace(/\/$/, '')}/.well-known/openid-configuration`
 	: undefined
@@ -107,7 +105,8 @@ export const auth = betterAuth({
 						{
 							providerId: KMITL_SSO_PROVIDER_ID,
 							clientId: process.env.KMITL_SSO_CLIENT_ID as string,
-							clientSecret: process.env.KMITL_SSO_CLIENT_SECRET as string,
+							// Empty for a public client; the realm ignores it (PKCE secures the exchange).
+							clientSecret: process.env.KMITL_SSO_CLIENT_SECRET ?? '',
 							discoveryUrl: discoveryUrl as string,
 							scopes: ['openid', 'profile', 'email'],
 							pkce: true,
@@ -116,9 +115,15 @@ export const auth = betterAuth({
 								// Extra keys are valid additionalFields; the cast satisfies the
 								// generic mapProfileToUser return type (it can't infer them).
 								return {
+									// KMITL registrar id_token often omits name/given_name/family_name; fall
+									// back (|| catches the empty string, unlike ??) or Better Auth rejects
+									// the sign-in as name_is_missing. A real name can be set in /profile.
 									name:
-										profile.name ??
-										`${profile.given_name ?? ''} ${profile.family_name ?? ''}`.trim(),
+										profile.name ||
+										`${profile.given_name ?? ''} ${profile.family_name ?? ''}`.trim() ||
+										username ||
+										profile.email ||
+										'KMITL',
 									username,
 									firstName: profile.given_name,
 									lastName: profile.family_name,
