@@ -82,25 +82,34 @@ async function main() {
 		const subj = await fs.collection('subjects').doc(s.subjectId).get()
 		const subjectNameTh = subj.exists ? ((subj.data()?.nameTh as string) ?? null) : null
 		const id = now + i
-		await fs
-			.collection('reviews')
-			.doc(String(id))
-			.set({
-				id,
-				subjectId: s.subjectId,
-				subjectNameTh,
-				authorUid: `sample-${i}`,
-				authorNickname: s.nick,
-				authorName: s.nick,
-				rating: s.rating,
-				review: s.review,
-				likeCount: s.likes,
+		const reviewRef = fs.collection('reviews').doc(String(id))
+		await reviewRef.set({
+			id,
+			subjectId: s.subjectId,
+			subjectNameTh,
+			authorUid: `sample-${i}`,
+			authorNickname: s.nick,
+			authorName: s.nick,
+			rating: s.rating,
+			review: s.review,
+			likeCount: s.likes,
+			createdAt: Timestamp.fromMillis(now - s.daysAgo * day),
+			year: s.year,
+			term: s.term,
+			sample: true,
+		})
+		// Back likeCount with real like docs so toggleLike (which recomputes from
+		// the likes subcollection) stays consistent — a first like becomes likes+1,
+		// not a reset. Deterministic ids → idempotent across re-runs.
+		const batch = fs.batch()
+		for (let k = 0; k < s.likes; k++) {
+			batch.set(reviewRef.collection('likes').doc(`seed-liker-${i}-${k}`), {
 				createdAt: Timestamp.fromMillis(now - s.daysAgo * day),
-				year: s.year,
-				term: s.term,
 				sample: true,
 			})
-		console.log(`+ ${s.subjectId} ${s.rating}★ "${s.nick}"`)
+		}
+		await batch.commit()
+		console.log(`+ ${s.subjectId} ${s.rating}★ "${s.nick}" (${s.likes} likes)`)
 	}
 	for (const subjectId of [...new Set(SAMPLES.map((s) => s.subjectId))]) {
 		const snap = await fs.collection('reviews').where('subjectId', '==', subjectId).get()
