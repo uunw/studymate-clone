@@ -77,22 +77,37 @@ export const getCurriculumGroupTree = createServerFn({ method: 'GET' })
 		}
 	})
 
+// Editing the group tree is NOT yet supported on Firestore. These writes keyed
+// off a global group id, but the tree is now denormalized inside curricula/{id}.
+// tree with no group→curriculum index — so a group id alone can't locate the
+// doc to mutate. A proper fix needs a normalized `curriculumGroups` collection
+// (then rebuild curricula/{id}.tree on save) or threading curriculumId through
+// the editor. Until then the tree is read-only (seeded from Postgres); fail
+// loudly rather than silently no-op so the admin editor surfaces the gap.
+const NOT_SUPPORTED =
+	'การแก้ไขโครงสร้างกลุ่มหลักสูตรยังไม่รองรับบน Firestore (โครงสร้างถูก denormalize ไว้ใน curricula/{id}.tree)'
+// Real return types kept so the editor's call sites still typecheck; the handler
+// always throws, so the admin UI shows the error instead of a silent no-op.
+const reject = (): never => {
+	throw new Error(NOT_SUPPORTED)
+}
+
 export const createCurriculumGroup = createServerFn({ method: 'POST' })
 	.inputValidator((d: unknown) => d)
-	.handler(async (): Promise<{ id: number }> => ({ id: 0 }))
+	.handler(async (): Promise<{ id: number }> => reject())
 
 export const updateCurriculumGroup = createServerFn({ method: 'POST' })
 	.inputValidator((d: unknown) => d)
-	.handler(async (): Promise<{ id: number }> => ({ id: 0 }))
+	.handler(async (): Promise<{ id: number }> => reject())
 
 export const deleteCurriculumGroup = createServerFn({ method: 'POST' })
 	.inputValidator((id: number) => id)
-	.handler(async (): Promise<{ ok: true; deleted: number }> => ({ ok: true, deleted: 0 }))
+	.handler(async (): Promise<{ ok: true; deleted: number }> => reject())
 
 export const assignSubjectsToGroup = createServerFn({ method: 'POST' })
 	.inputValidator((d: unknown) => d)
-	.handler(async (): Promise<{ added: number; skipped: string[] }> => ({ added: 0, skipped: [] }))
+	.handler(async (): Promise<{ added: number; skipped: string[] }> => reject())
 
 export const removeSubjectFromGroup = createServerFn({ method: 'POST' })
 	.inputValidator((d: unknown) => d)
-	.handler(async (): Promise<{ ok: true }> => ({ ok: true }))
+	.handler(async (): Promise<{ ok: true }> => reject())

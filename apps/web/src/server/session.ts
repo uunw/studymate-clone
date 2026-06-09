@@ -44,6 +44,13 @@ export function requireUid(): string {
 	return uid
 }
 
+/** Admin guard for admin writes (rules also gate via the admins/{uid} marker). */
+export async function requireAdmin(): Promise<SessionUser> {
+	const user = await getSessionUser()
+	if (!user?.isAdmin) throw new Error('FORBIDDEN')
+	return user
+}
+
 export async function getSessionUser(): Promise<SessionUser | null> {
 	await auth.authStateReady()
 	const u = auth.currentUser
