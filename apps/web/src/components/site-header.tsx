@@ -1,8 +1,7 @@
 import { Button } from '@repo/ui'
 import { Link, useRouter } from '@tanstack/react-router'
-import { authClient } from '~/lib/auth-client'
+import { useAuth } from '~/lib/auth'
 import type { SessionUser } from '~/server/session'
-import { getSsoLogoutUrl } from '~/server/sso'
 
 const NAV = [
 	{ to: '/subjects', label: 'รายวิชา' },
@@ -11,18 +10,12 @@ const NAV = [
 
 export function SiteHeader({ user }: { user: SessionUser | null }) {
 	const router = useRouter()
+	const { signOut } = useAuth()
 
 	async function handleSignOut() {
-		// Resolve the SSO logout URL while the session is still valid, then sign
-		// out locally and end the KMITL SSO session too (Single Logout).
-		const logoutUrl = await getSsoLogoutUrl().catch(() => null)
-		await authClient.signOut()
+		await signOut()
 		await router.invalidate()
-		if (logoutUrl) {
-			window.location.href = logoutUrl
-		} else {
-			router.navigate({ to: '/' })
-		}
+		router.navigate({ to: '/' })
 	}
 
 	return (

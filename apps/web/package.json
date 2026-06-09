@@ -12,22 +12,15 @@
 		"clean": "rm -rf dist .output .nitro .turbo .tanstack"
 	},
 	"dependencies": {
-		"@repo/auth": "workspace:*",
 		"@repo/core": "workspace:*",
 		"@repo/db": "workspace:*",
 		"@repo/ui": "workspace:*",
 		"@tanstack/react-form": "^1.33.0",
 		"@tanstack/react-query": "^5.101.0",
 		"@tanstack/react-router": "^1.170.0",
-		"@tanstack/react-router-devtools": "^1.167.0",
-		"@tanstack/react-router-ssr-query": "^1.167.0",
-		"@tanstack/react-start": "^1.168.0",
-		"better-auth": "catalog:",
-		"jotai": "catalog:",
+		"firebase": "^12.14.0",
 		"react": "catalog:",
-		"react-dom": "catalog:",
-		"remeda": "catalog:",
-		"zod": "catalog:"
+		"react-dom": "catalog:"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "^4.3.0",

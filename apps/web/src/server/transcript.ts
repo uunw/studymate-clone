@@ -1,104 +1,90 @@
-import { and, asc, db, desc, eq, schema } from '@repo/db'
-import { createServerFn } from '@tanstack/react-start'
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore'
+import type { Detail } from '~/components/my-subjects-types'
+import { db } from '~/lib/firebase'
+import { createServerFn } from '~/lib/server-fn'
+import { currentUid, requireUid } from './session'
 
-/** The signed-in user's latest transcript with parsed course rows. */
-export const getMyTranscript = createServerFn({ method: 'GET' }).handler(async () => {
-	const { requireUser } = await import('./auth.server')
-	const user = await requireUser()
+type TranscriptMeta = { id: number; userId: string; createdAt: string }
+const tDoc = (uid: string) => doc(db, 'users', uid, 'private', 'transcript')
 
-	const [transcript] = await db
-		.select()
-		.from(schema.transcript)
-		.where(eq(schema.transcript.userId, user.id))
-		.orderBy(desc(schema.transcript.createdAt))
-		.limit(1)
-	if (!transcript) return null
+/** The signed-in user's transcript with parsed + enriched course rows. */
+export const getMyTranscript = createServerFn({ method: 'GET' }).handler(
+	async (): Promise<{ transcript: TranscriptMeta; details: Detail[] } | null> => {
+		const uid = currentUid()
+		if (!uid) return null
+		const snap = await getDoc(tDoc(uid))
+		if (!snap.exists()) return null
+		const d = snap.data()
+		const ts = d.createdAt
+		const createdAt =
+			ts instanceof Timestamp ? ts.toDate().toISOString() : typeof ts === 'string' ? ts : ''
+		return { transcript: { id: 1, userId: uid, createdAt }, details: (d.details as Detail[]) ?? [] }
+	},
+)
 
-	const details = await db
-		.select({
-			id: schema.transcriptDetail.id,
-			subjectId: schema.transcriptDetail.subjectId,
-			grade: schema.transcriptDetail.grade,
-			nameTh: schema.subject.nameTh,
-			nameEn: schema.subject.nameEn,
-			credit: schema.subject.credit,
-			year: schema.teachtable.year,
-			term: schema.teachtable.term,
-		})
-		.from(schema.transcriptDetail)
-		.leftJoin(schema.subject, eq(schema.subject.id, schema.transcriptDetail.subjectId))
-		.leftJoin(schema.teachtable, eq(schema.teachtable.id, schema.transcriptDetail.teachtableId))
-		.where(eq(schema.transcriptDetail.transcriptId, transcript.id))
-		.orderBy(
-			asc(schema.teachtable.year),
-			asc(schema.teachtable.term),
-			schema.transcriptDetail.subjectId,
-		)
-
-	return { transcript, details }
-})
-
-/** Upload + parse a transcript PDF; replaces any previous transcript. */
+/** Upload + parse a transcript PDF; replaces any previous transcript. Rows are
+ *  enriched against the catalog (nameTh/credit) at write time so reads are one
+ *  doc. The PDF parser is loaded lazily (heavy) only on upload. */
 export const uploadTranscript = createServerFn({ method: 'POST' })
-	.inputValidator((data: FormData) => {
-		const file = data.get('file')
+	.inputValidator((d: FormData) => d)
+	.handler(async (ctx): Promise<{ imported: number; parsed: number }> => {
+		const uid = requireUid()
+		const file = (ctx.data as FormData).get('file')
 		if (!(file instanceof File)) throw new Error('ไม่พบไฟล์')
-		return file
-	})
-	.handler(async ({ data: file }) => {
-		const { requireUser } = await import('./auth.server')
 		const { parseTranscriptPdf } = await import('@repo/core/transcript')
-		const user = await requireUser()
 
 		const bytes = new Uint8Array(await file.arrayBuffer())
 		const rows = await parseTranscriptPdf(bytes)
 
-		// Replace prior transcript.
-		await db.delete(schema.transcript).where(eq(schema.transcript.userId, user.id))
-		const [transcript] = await db.insert(schema.transcript).values({ userId: user.id }).returning()
+		// Enrich each row with the catalog's Thai name + credit (fall back to the
+		// transcript's own English name / credit for subjects not in our catalog).
+		const ids = [...new Set(rows.map((r) => r.subjectId))]
+		const catalog = new Map<
+			string,
+			{ nameTh: string | null; nameEn: string | null; credit: number | null }
+		>()
+		await Promise.all(
+			ids.map(async (id) => {
+				const s = await getDoc(doc(db, 'subjects', id))
+				if (s.exists()) {
+					const v = s.data()
+					catalog.set(id, {
+						nameTh: v.nameTh ?? null,
+						nameEn: v.nameEn ?? null,
+						credit: v.credit ?? null,
+					})
+				}
+			}),
+		)
 
-		// Ensure every parsed subject exists (insert stubs for ones not in our
-		// catalog, from the transcript's English name + credit; don't overwrite).
-		const subjValues = [...new Map(rows.map((r) => [r.subjectId, r])).values()].map((r) => ({
-			id: r.subjectId,
-			nameEn: r.nameEn,
-			credit: r.credit,
-		}))
-		if (subjValues.length) {
-			await db.insert(schema.subject).values(subjValues).onConflictDoNothing()
-		}
-
-		let imported = 0
-		for (const r of rows) {
-			let teachtableId: number | null = null
-			if (r.year && r.term) {
-				const [tt] = await db
-					.select()
-					.from(schema.teachtable)
-					.where(and(eq(schema.teachtable.year, r.year), eq(schema.teachtable.term, r.term)))
-					.limit(1)
-				teachtableId =
-					tt?.id ??
-					(
-						await db.insert(schema.teachtable).values({ year: r.year, term: r.term }).returning()
-					)[0]!.id
-			}
-
-			await db.insert(schema.transcriptDetail).values({
-				transcriptId: transcript!.id,
-				subjectId: r.subjectId,
-				teachtableId,
-				grade: r.grade,
+		const details: Detail[] = rows
+			.map((r, i) => {
+				const cat = catalog.get(r.subjectId)
+				return {
+					id: i + 1,
+					subjectId: r.subjectId,
+					grade: r.grade,
+					nameTh: cat?.nameTh ?? null,
+					nameEn: cat?.nameEn ?? r.nameEn,
+					credit: cat?.credit ?? r.credit,
+					year: r.year,
+					term: r.term,
+				}
 			})
-			imported++
-		}
+			.sort(
+				(a, b) =>
+					(a.year ?? 0) - (b.year ?? 0) ||
+					(a.term ?? 0) - (b.term ?? 0) ||
+					(a.subjectId ?? '').localeCompare(b.subjectId ?? ''),
+			)
 
-		return { imported, parsed: rows.length }
+		await setDoc(tDoc(uid), { createdAt: serverTimestamp(), details })
+		return { imported: details.length, parsed: rows.length }
 	})
 
-export const deleteTranscript = createServerFn({ method: 'POST' }).handler(async () => {
-	const { requireUser } = await import('./auth.server')
-	const user = await requireUser()
-	await db.delete(schema.transcript).where(eq(schema.transcript.userId, user.id))
-	return { ok: true }
-})
+export const deleteTranscript = createServerFn({ method: 'POST' }).handler(
+	async (): Promise<{ ok: true }> => {
+		await deleteDoc(tDoc(requireUid()))
+		return { ok: true }
+	},
+)

@@ -1,9 +1,7 @@
-import { Alert, Button, Card, CardBody, Field, Input } from '@repo/ui'
-import { useForm } from '@tanstack/react-form'
-import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
+import { Alert, Button, Card, CardBody } from '@repo/ui'
+import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { z } from 'zod'
-import { authClient } from '~/lib/auth-client'
+import { useAuth } from '~/lib/auth'
 
 export const Route = createFileRoute('/sign-in')({
 	beforeLoad: ({ context }) => {
@@ -12,119 +10,37 @@ export const Route = createFileRoute('/sign-in')({
 	component: SignIn,
 })
 
-const emailSignIn = z.object({
-	email: z.email('อีเมลไม่ถูกต้อง'),
-	password: z.string().min(1, 'กรุณากรอกรหัสผ่าน'),
-})
-
 function SignIn() {
 	const router = useRouter()
+	const { signIn } = useAuth()
 	const [error, setError] = useState<string | null>(null)
-	const [ssoLoading, setSsoLoading] = useState(false)
+	const [loading, setLoading] = useState(false)
 
-	const form = useForm({
-		defaultValues: { email: '', password: '' },
-		validators: { onSubmit: emailSignIn },
-		onSubmit: async ({ value }) => {
-			setError(null)
-			const res = await authClient.signIn.email({ email: value.email, password: value.password })
-			if (res.error) {
-				setError('อีเมลหรือรหัสผ่านไม่ถูกต้อง')
-				return
-			}
+	async function handleGoogle() {
+		setError(null)
+		setLoading(true)
+		try {
+			await signIn()
 			await router.invalidate()
 			router.navigate({ to: '/' })
-		},
-	})
-
-	async function handleSso() {
-		setError(null)
-		setSsoLoading(true)
-		const res = await authClient.signIn.oauth2({
-			providerId: 'kmitl',
-			callbackURL: '/',
-			errorCallbackURL: '/sign-in',
-		})
-		if (res?.error) {
-			setError('ยังไม่สามารถใช้ KMITL SSO ได้ในขณะนี้')
-			setSsoLoading(false)
+		} catch (e) {
+			setError(e instanceof Error ? e.message : 'เข้าสู่ระบบไม่สำเร็จ')
+			setLoading(false)
 		}
 	}
 
 	return (
 		<div className="mx-auto max-w-sm py-10">
 			<Card>
-				<CardBody className="space-y-5">
-					<h1 className="text-center font-bold text-xl">เข้าสู่ระบบ</h1>
-					{error && <Alert tone="error">{error}</Alert>}
-
-					<form
-						className="space-y-4"
-						onSubmit={(e) => {
-							e.preventDefault()
-							form.handleSubmit()
-						}}
-					>
-						<form.Field name="email">
-							{(field) => (
-								<Field
-									label="อีเมล"
-									htmlFor={field.name}
-									error={field.state.meta.errors[0]?.message}
-								>
-									<Input
-										id={field.name}
-										type="email"
-										placeholder="you@kmitl.ac.th"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</form.Field>
-						<form.Field name="password">
-							{(field) => (
-								<Field
-									label="รหัสผ่าน"
-									htmlFor={field.name}
-									error={field.state.meta.errors[0]?.message}
-								>
-									<Input
-										id={field.name}
-										type="password"
-										value={field.state.value}
-										onBlur={field.handleBlur}
-										onChange={(e) => field.handleChange(e.target.value)}
-									/>
-								</Field>
-							)}
-						</form.Field>
-						<form.Subscribe selector={(s) => s.isSubmitting}>
-							{(isSubmitting) => (
-								<Button type="submit" className="w-full" loading={isSubmitting}>
-									เข้าสู่ระบบ
-								</Button>
-							)}
-						</form.Subscribe>
-					</form>
-
-					<div className="flex items-center gap-3 text-slate-500 text-xs">
-						<span className="h-px flex-1 bg-slate-200" />
-						หรือ
-						<span className="h-px flex-1 bg-slate-200" />
-					</div>
-
-					<Button variant="secondary" className="w-full" loading={ssoLoading} onClick={handleSso}>
-						เข้าสู่ระบบด้วย KMITL SSO
-					</Button>
-
-					<p className="text-center text-slate-500 text-sm">
-						ยังไม่มีบัญชี?{' '}
-						<Link to="/sign-up" className="text-brand-600 hover:underline">
-							สมัครสมาชิก
-						</Link>
+				<CardBody className="space-y-5 text-center">
+					<h1 className="font-bold text-xl">เข้าสู่ระบบ</h1>
+					<p className="text-slate-600 text-sm">
+						ใช้บัญชี KMITL (Google) ของคุณ — รหัสนักศึกษามาจากอีเมล @kmitl.ac.th
 					</p>
+					{error && <Alert tone="error">{error}</Alert>}
+					<Button className="w-full" loading={loading} onClick={handleGoogle}>
+						เข้าสู่ระบบด้วยบัญชี KMITL
+					</Button>
 				</CardBody>
 			</Card>
 		</div>

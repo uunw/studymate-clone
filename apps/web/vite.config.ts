@@ -1,51 +1,42 @@
-import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
-import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import viteReact from '@vitejs/plugin-react'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 
-// Load the monorepo-root .env into process.env so server-side code (db/auth,
-// which read process.env at runtime) works in local dev. In production these
-// come from the hosting platform's env vars.
-const rootEnvDir = fileURLToPath(new URL('../../', import.meta.url))
-Object.assign(process.env, loadEnv('development', rootEnvDir, ''))
-
-// Local HTTPS for dev: browsers with HTTPS-First / HSTS force-upgrade
-// http→localhost/127.0.0.1 to https, which breaks the http OAuth callback. Serve
-// real TLS when a self-signed cert exists (apps/web/certs/, gitignored — generate
-// with `openssl req -x509 -nodes -newkey rsa:2048 -keyout dev-key.pem -out
-// dev-cert.pem -subj /CN=localhost -addext subjectAltName=DNS:localhost,IP:127.0.0.1`).
-// Falls back to plain http (and so CI/other machines) when the cert is absent.
-const keyPath = fileURLToPath(new URL('./certs/dev-key.pem', import.meta.url))
-const certPath = fileURLToPath(new URL('./certs/dev-cert.pem', import.meta.url))
-const https =
-	fs.existsSync(keyPath) && fs.existsSync(certPath)
-		? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
-		: undefined
-
+// Pure client SPA (Firebase migration): no SSR, no server functions. host:true
+// binds all interfaces (127.0.0.1 + LAN) for device testing.
 export default defineConfig({
-	// host:true binds all interfaces (127.0.0.1 + LAN), not just IPv6 localhost —
-	// lets you reach the app at 127.0.0.1 (sidesteps any localhost HSTS pin) and
-	// test the mobile UI from a phone on the same network.
-	server: { port: 3000, host: true, https },
-	envDir: rootEnvDir,
+	// VITE_* env (e.g. VITE_FIREBASE_*) lives in the monorepo-root .env.
+	envDir: fileURLToPath(new URL('../../', import.meta.url)),
+	server: { port: 3000, host: true },
 	resolve: {
-		alias: {
-			'~': fileURLToPath(new URL('./src', import.meta.url)),
-		},
+		alias: { '~': fileURLToPath(new URL('./src', import.meta.url)) },
 	},
-	ssr: {
-		// Workspace packages ship TS source → must be transformed by Vite.
-		noExternal: ['@repo/db', '@repo/auth', '@repo/core', '@repo/ui'],
-		// Heavy node-only deps: keep external (required at runtime, not bundled).
-		// Bundling drizzle/better-auth pulls in unused dialects and breaks rollup.
-		external: ['drizzle-orm', 'pg', 'better-auth', 'nodemailer', 'unpdf'],
+	build: {
+		rollupOptions: {
+			output: {
+				// Split the heavy, rarely-changing vendors into their own long-cached
+				// chunks (app code changes far more often). pdfjs (unpdf) is left alone
+				// — it's already a lazy async chunk via the dynamic import in
+				// server/transcript.ts, and must stay that way.
+				manualChunks(id) {
+					if (!id.includes('node_modules')) return
+					if (/[\\/](firebase|@firebase|@grpc|protobufjs|idb)[\\/]/.test(id)) return 'firebase'
+					if (/[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+					if (id.includes('@tanstack')) return 'tanstack'
+				},
+			},
+		},
+		// Keeps the eager vendor chunks (firebase ~333kB the largest) under the
+		// warning. The lazy pdfjs (unpdf) chunk still trips it — that's expected and
+		// fine: it only loads on transcript upload, never on first paint.
+		chunkSizeWarningLimit: 700,
 	},
 	plugins: [
 		tailwindcss(),
-		// tanstackStart() must come before viteReact().
-		tanstackStart(),
+		// tanstackRouter() generates routeTree.gen.ts; must precede viteReact().
+		tanstackRouter({ target: 'react', autoCodeSplitting: true }),
 		viteReact(),
 	],
 })

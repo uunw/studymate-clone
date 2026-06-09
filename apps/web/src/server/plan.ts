@@ -1,6 +1,7 @@
-import { db, eq, schema } from '@repo/db'
-import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { db } from '~/lib/firebase'
+import { createServerFn } from '~/lib/server-fn'
+import { currentUid, requireUid } from './session'
 
 export type PlanSelectionItem = {
 	subjectId: string
@@ -9,49 +10,30 @@ export type PlanSelectionItem = {
 	isFree: boolean
 }
 
-/** The signed-in user's saved what-if registration selection (progress tab). */
+// The saved what-if selection is small + replaced wholesale, so it lives as one
+// doc (items array) at users/{uid}/private/plan rather than a subcollection.
 export const getMyPlanSelection = createServerFn({ method: 'GET' }).handler(
 	async (): Promise<PlanSelectionItem[]> => {
-		const { requireUser } = await import('./auth.server')
-		const user = await requireUser()
-		return db
-			.select({
-				subjectId: schema.planSubject.subjectId,
-				credit: schema.planSubject.credit,
-				name: schema.planSubject.name,
-				isFree: schema.planSubject.isFree,
-			})
-			.from(schema.planSubject)
-			.where(eq(schema.planSubject.userId, user.id))
+		const uid = currentUid()
+		if (!uid) return []
+		const snap = await getDoc(doc(db, 'users', uid, 'private', 'plan'))
+		return snap.exists() ? ((snap.data().items as PlanSelectionItem[]) ?? []) : []
 	},
 )
 
-/** Replace the user's saved selection with the given set (empty clears it). */
 export const savePlanSelection = createServerFn({ method: 'POST' })
-	.inputValidator(
-		z.array(
-			z.object({
-				subjectId: z.string(),
-				credit: z.number().nullable().optional(),
-				name: z.string().nullable().optional(),
-				isFree: z.boolean().optional(),
-			}),
-		),
-	)
-	.handler(async ({ data }) => {
-		const { requireUser } = await import('./auth.server')
-		const user = await requireUser()
-		await db.delete(schema.planSubject).where(eq(schema.planSubject.userId, user.id))
-		if (data.length) {
-			await db.insert(schema.planSubject).values(
-				data.map((d) => ({
-					userId: user.id,
-					subjectId: d.subjectId,
-					credit: d.credit ?? null,
-					name: d.name ?? null,
-					isFree: !!d.isFree,
-				})),
-			)
-		}
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ ok: true }> => {
+		const input = (ctx.data as Partial<PlanSelectionItem>[]) ?? []
+		const items: PlanSelectionItem[] = input.map((d) => ({
+			subjectId: String(d.subjectId),
+			credit: d.credit ?? null,
+			name: d.name ?? null,
+			isFree: !!d.isFree,
+		}))
+		await setDoc(doc(db, 'users', requireUid(), 'private', 'plan'), {
+			items,
+			updatedAt: serverTimestamp(),
+		})
 		return { ok: true }
 	})

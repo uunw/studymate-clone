@@ -30,7 +30,6 @@ import { Route as AdminProgramsRouteImport } from './routes/admin/programs'
 import { Route as AdminFacultiesRouteImport } from './routes/admin/faculties'
 import { Route as AdminDepartmentsRouteImport } from './routes/admin/departments'
 import { Route as AdminCurriculaRouteImport } from './routes/admin/curricula'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AdminCurriculumGroupCurriculumIdRouteImport } from './routes/admin/curriculum-group/$curriculumId'
 
 const TermOfUseRoute = TermOfUseRouteImport.update({
@@ -138,11 +137,6 @@ const AdminCurriculaRoute = AdminCurriculaRouteImport.update({
   path: '/admin/curricula',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminCurriculumGroupCurriculumIdRoute =
   AdminCurriculumGroupCurriculumIdRouteImport.update({
     id: '/admin/curriculum-group/$curriculumId',
@@ -173,7 +167,6 @@ export interface FileRoutesByFullPath {
   '/my-subjects/': typeof MySubjectsIndexRoute
   '/subjects/': typeof SubjectsIndexRoute
   '/admin/curriculum-group/$curriculumId': typeof AdminCurriculumGroupCurriculumIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -197,7 +190,6 @@ export interface FileRoutesByTo {
   '/my-subjects': typeof MySubjectsIndexRoute
   '/subjects': typeof SubjectsIndexRoute
   '/admin/curriculum-group/$curriculumId': typeof AdminCurriculumGroupCurriculumIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -223,7 +215,6 @@ export interface FileRoutesById {
   '/my-subjects/': typeof MySubjectsIndexRoute
   '/subjects/': typeof SubjectsIndexRoute
   '/admin/curriculum-group/$curriculumId': typeof AdminCurriculumGroupCurriculumIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -250,7 +241,6 @@ export interface FileRouteTypes {
     | '/my-subjects/'
     | '/subjects/'
     | '/admin/curriculum-group/$curriculumId'
-    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -274,7 +264,6 @@ export interface FileRouteTypes {
     | '/my-subjects'
     | '/subjects'
     | '/admin/curriculum-group/$curriculumId'
-    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
@@ -299,7 +288,6 @@ export interface FileRouteTypes {
     | '/my-subjects/'
     | '/subjects/'
     | '/admin/curriculum-group/$curriculumId'
-    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -320,7 +308,6 @@ export interface RootRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   SubjectsIndexRoute: typeof SubjectsIndexRoute
   AdminCurriculumGroupCurriculumIdRoute: typeof AdminCurriculumGroupCurriculumIdRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -472,13 +459,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCurriculaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin/curriculum-group/$curriculumId': {
       id: '/admin/curriculum-group/$curriculumId'
       path: '/admin/curriculum-group/$curriculumId'
@@ -527,17 +507,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   SubjectsIndexRoute: SubjectsIndexRoute,
   AdminCurriculumGroupCurriculumIdRoute: AdminCurriculumGroupCurriculumIdRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

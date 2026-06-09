@@ -4,128 +4,95 @@ import {
 	facultySchema,
 	programSchema,
 } from '@repo/core/schemas'
-import { db, eq, schema } from '@repo/db'
-import { createServerFn } from '@tanstack/react-start'
-import { z } from 'zod'
+import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore'
+import { db } from '~/lib/firebase'
+import { createServerFn } from '~/lib/server-fn'
+import { requireAdmin } from './session'
 
-const idInput = z.object({ id: z.number().int() })
+// Reference-data CRUD. Collections are keyed by String(numeric id) to match the
+// seed; new docs get max(existing id)+1 (admin-only, no real concurrency). Writes
+// are gated by requireAdmin() + the isAdmin() firestore rule on each collection.
+async function nextId(col: string): Promise<number> {
+	const snap = await getDocs(collection(db, col))
+	return snap.docs.reduce((m, d) => Math.max(m, (d.data().id as number) ?? 0), 0) + 1
+}
+async function save(
+	col: string,
+	id: number | undefined,
+	fields: Record<string, unknown>,
+): Promise<{ id: number }> {
+	await requireAdmin()
+	const realId = id ?? (await nextId(col))
+	await setDoc(doc(db, col, String(realId)), { id: realId, ...fields }, { merge: id != null })
+	return { id: realId }
+}
+async function remove(col: string, id: number): Promise<{ ok: true }> {
+	await requireAdmin()
+	await deleteDoc(doc(db, col, String(id)))
+	return { ok: true }
+}
+const idOf = (d: unknown) => (d as { id: number }).id
 
-// ---- Faculty ----
 export const saveFaculty = createServerFn({ method: 'POST' })
-	.inputValidator(facultySchema)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		const values = {
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ id: number }> => {
+		const data = facultySchema.parse(ctx.data)
+		return save('faculties', data.id, {
 			kmitlId: data.kmitlId,
 			nameTh: data.nameTh,
 			nameEn: data.nameEn,
 			isVisible: data.isVisible ? 1 : 0,
-		}
-		if (data.id) {
-			await db.update(schema.faculty).set(values).where(eq(schema.faculty.id, data.id))
-			return { id: data.id }
-		}
-		const [row] = await db.insert(schema.faculty).values(values).returning()
-		return { id: row!.id }
+		})
 	})
-
 export const deleteFaculty = createServerFn({ method: 'POST' })
-	.inputValidator(idInput)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		await db.delete(schema.faculty).where(eq(schema.faculty.id, data.id))
-		return { ok: true }
-	})
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ ok: true }> => remove('faculties', idOf(ctx.data)))
 
-// ---- Department ----
 export const saveDepartment = createServerFn({ method: 'POST' })
-	.inputValidator(departmentSchema)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		const values = {
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ id: number }> => {
+		const data = departmentSchema.parse(ctx.data)
+		return save('departments', data.id, {
 			facultyId: data.facultyId,
 			kmitlId: data.kmitlId,
 			nameTh: data.nameTh,
 			nameEn: data.nameEn,
 			isVisible: data.isVisible ? 1 : 0,
-		}
-		if (data.id) {
-			await db.update(schema.department).set(values).where(eq(schema.department.id, data.id))
-			return { id: data.id }
-		}
-		const [row] = await db.insert(schema.department).values(values).returning()
-		return { id: row!.id }
+		})
 	})
-
 export const deleteDepartment = createServerFn({ method: 'POST' })
-	.inputValidator(idInput)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		await db.delete(schema.department).where(eq(schema.department.id, data.id))
-		return { ok: true }
-	})
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ ok: true }> => remove('departments', idOf(ctx.data)))
 
-// ---- Program ----
 export const saveProgram = createServerFn({ method: 'POST' })
-	.inputValidator(programSchema)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		const values = {
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ id: number }> => {
+		const data = programSchema.parse(ctx.data)
+		return save('programs', data.id, {
 			departmentId: data.departmentId,
 			kmitlId: data.kmitlId,
 			nameTh: data.nameTh,
 			nameEn: data.nameEn,
 			isVisible: data.isVisible ? 1 : 0,
-		}
-		if (data.id) {
-			await db.update(schema.program).set(values).where(eq(schema.program.id, data.id))
-			return { id: data.id }
-		}
-		const [row] = await db.insert(schema.program).values(values).returning()
-		return { id: row!.id }
+		})
 	})
-
 export const deleteProgram = createServerFn({ method: 'POST' })
-	.inputValidator(idInput)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		await db.delete(schema.program).where(eq(schema.program.id, data.id))
-		return { ok: true }
-	})
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ ok: true }> => remove('programs', idOf(ctx.data)))
 
-// ---- Curriculum ----
 export const saveCurriculum = createServerFn({ method: 'POST' })
-	.inputValidator(curriculumSchema)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		const values = {
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ id: number }> => {
+		const data = curriculumSchema.parse(ctx.data)
+		return save('curricula', data.id, {
 			programId: data.programId,
 			groupId: data.groupId ?? null,
 			year: data.year,
 			nameTh: data.nameTh,
 			nameEn: data.nameEn,
 			isVisible: data.isVisible ? 1 : 0,
-		}
-		if (data.id) {
-			await db.update(schema.curriculum).set(values).where(eq(schema.curriculum.id, data.id))
-			return { id: data.id }
-		}
-		const [row] = await db.insert(schema.curriculum).values(values).returning()
-		return { id: row!.id }
+		})
 	})
-
 export const deleteCurriculum = createServerFn({ method: 'POST' })
-	.inputValidator(idInput)
-	.handler(async ({ data }) => {
-		const { requireAdmin } = await import('./auth.server')
-		await requireAdmin()
-		await db.delete(schema.curriculum).where(eq(schema.curriculum.id, data.id))
-		return { ok: true }
-	})
+	.inputValidator((d: unknown) => d)
+	.handler(async (ctx): Promise<{ ok: true }> => remove('curricula', idOf(ctx.data)))

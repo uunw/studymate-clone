@@ -1,4 +1,3 @@
-import { authClient } from '@repo/auth/client'
 import { profileSchema } from '@repo/core/schemas'
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, Select } from '@repo/ui'
 import { useForm } from '@tanstack/react-form'
@@ -211,88 +210,6 @@ function Profile() {
 					</Button>
 				</CardBody>
 			</Card>
-
-			<PasswordCard />
 		</div>
-	)
-}
-
-function PasswordCard() {
-	const [current, setCurrent] = useState('')
-	const [next, setNext] = useState('')
-	const [confirm, setConfirm] = useState('')
-	const [busy, setBusy] = useState(false)
-	const [msg, setMsg] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
-
-	async function onSubmit(e: React.FormEvent) {
-		e.preventDefault()
-		if (next.length < 8) {
-			setMsg({ tone: 'error', text: 'รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร' })
-			return
-		}
-		if (next !== confirm) {
-			setMsg({ tone: 'error', text: 'รหัสผ่านยืนยันไม่ตรงกัน' })
-			return
-		}
-		setBusy(true)
-		setMsg(null)
-		const res = await authClient.changePassword({
-			currentPassword: current,
-			newPassword: next,
-			revokeOtherSessions: false,
-		})
-		setBusy(false)
-		if (res.error) {
-			setMsg({ tone: 'error', text: res.error.message ?? 'เปลี่ยนรหัสผ่านไม่สำเร็จ' })
-			return
-		}
-		setMsg({ tone: 'success', text: 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว' })
-		setCurrent('')
-		setNext('')
-		setConfirm('')
-	}
-
-	return (
-		<Card>
-			<CardHeader>
-				<h2 className="font-semibold text-slate-900">เปลี่ยนรหัสผ่าน</h2>
-			</CardHeader>
-			<CardBody>
-				{msg && (
-					<Alert tone={msg.tone} className="mb-4">
-						{msg.text}
-					</Alert>
-				)}
-				<form className="space-y-4" onSubmit={onSubmit}>
-					<Field label="รหัสผ่านปัจจุบัน" htmlFor="pw-current">
-						<Input
-							id="pw-current"
-							type="password"
-							value={current}
-							onChange={(e) => setCurrent(e.target.value)}
-						/>
-					</Field>
-					<Field label="รหัสผ่านใหม่" htmlFor="pw-new">
-						<Input
-							id="pw-new"
-							type="password"
-							value={next}
-							onChange={(e) => setNext(e.target.value)}
-						/>
-					</Field>
-					<Field label="ยืนยันรหัสผ่านใหม่" htmlFor="pw-confirm">
-						<Input
-							id="pw-confirm"
-							type="password"
-							value={confirm}
-							onChange={(e) => setConfirm(e.target.value)}
-						/>
-					</Field>
-					<Button type="submit" loading={busy} disabled={!current || !next}>
-						เปลี่ยนรหัสผ่าน
-					</Button>
-				</form>
-			</CardBody>
-		</Card>
 	)
 }

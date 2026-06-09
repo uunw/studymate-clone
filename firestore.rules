@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// StudyMate Firestore security model (no server / no Cloud Functions — rules ARE
+// the authorization layer). See MIGRATION.md. Reference data is public-read /
+// admin-write; user data is owner-only; every write requires a verified
+// @kmitl.ac.th identity.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    // Verified KMITL identity (Google sign-in restricted to the kmitl.ac.th domain).
+    function kmitl() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('.*@kmitl[.]ac[.]th');
+    }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // ---- Academic reference data: public read, admin write ----
+    match /faculties/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /departments/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /programs/{id}    { allow read: if true; allow write: if isAdmin(); }
+    match /curricula/{id}   { allow read: if true; allow write: if isAdmin(); }
+    match /sections/{id}    { allow read: if true; allow write: if isAdmin(); }
+    match /teachtables/{id} { allow read: if true; allow write: if isAdmin(); }
+
+    match /subjects/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+      // Review aggregate denormalization (no Cloud Functions): any verified KMITL
+      // user may update ONLY {ratingAvg, reviewCount}, which server/reviews.ts
+      // recomputes from the reviews. Trust caveat: a client could write a wrong
+      // aggregate; the authoritative reviews themselves stay author-gated.
+      allow update: if kmitl()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingAvg', 'reviewCount']);
+    }
+
+    // ---- Reviews: public read; authored writes; rating bounded ----
+    match /reviews/{rid} {
+      allow read: if true;
+      allow create: if kmitl()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5;
+      allow update, delete: if kmitl() && resource.data.authorUid == request.auth.uid;
+      // Any verified KMITL user may bump ONLY likeCount (toggle like), recomputed
+      // by server/reviews.ts from the likes subcollection.
+      allow update: if kmitl()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']);
+
+      match /likes/{uid} {
+        allow read: if true;
+        allow write: if kmitl() && uid == request.auth.uid;
+      }
+    }
+
+    // ---- Per-user data: owner only (transcript grades, what-if plan, profile) ----
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid) && kmitl();
+      match /{sub}/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ---- Admin role markers: granted manually in the console; no client writes.
+    // Owner can read their own marker (session derives isAdmin from it). ----
+    match /admins/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+  }
+}
