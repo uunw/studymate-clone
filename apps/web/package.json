@@ -23,6 +23,7 @@
 		"@tanstack/react-router-ssr-query": "^1.167.0",
 		"@tanstack/react-start": "^1.168.0",
 		"better-auth": "catalog:",
+		"firebase": "^12.14.0",
 		"jotai": "catalog:",
 		"react": "catalog:",
 		"react-dom": "catalog:",
