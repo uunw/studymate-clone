@@ -37,3 +37,6 @@ pnpm-debug.log*
 
 # local dev TLS cert (self-signed)
 apps/web/certs/
+
+# firebase admin service-account key (seed scripts)
+.firebase-admin-key.json

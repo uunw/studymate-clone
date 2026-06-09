@@ -1,7 +1,18 @@
-import type { Subject, SubjectClass, Teachtable } from '@repo/db'
+import type { SubjectFilter } from '@repo/core/schemas'
+import type { Subject } from '@repo/db'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '~/lib/firebase'
 import { createServerFn } from '~/lib/server-fn'
 
-// TODO(phase 4): all of these read from Firestore (subjects/sections collections).
+// Subjects carry denormalized fields (ratingAvg, reviewCount, searchTokens,
+// offeredDays, openSections) seeded by packages/db seed-firestore.
+type StoredSubject = Subject & {
+	ratingAvg: number
+	reviewCount: number
+	searchTokens: string[]
+	offeredDays: number[]
+	openSections: number
+}
 
 type SubjectListItem = Pick<Subject, 'id' | 'nameTh' | 'nameEn' | 'credit'> & {
 	rating: number
@@ -9,21 +20,67 @@ type SubjectListItem = Pick<Subject, 'id' | 'nameTh' | 'nameEn' | 'credit'> & {
 	openSections: number
 	ruleTh: string | null
 }
+
+/**
+ * Paginated subject list. The catalog (~750 docs) is fetched once and filtered
+ * client-side — Firestore has no substring search. TODO(perf): denormalized
+ * query fields / a search service if the catalog grows.
+ * TODO(phase 4b): curriculum-group / faculty / department filters.
+ */
 export const listSubjects = createServerFn({ method: 'GET' })
 	.inputValidator((d: unknown) => d)
 	.handler(
-		async (): Promise<{
+		async (
+			ctx,
+		): Promise<{
 			items: SubjectListItem[]
 			page: number
 			pageSize: number
 			total: number
 			totalPages: number
-		}> => ({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
+		}> => {
+			const data = ctx.data as SubjectFilter
+			const { page, pageSize } = data
+			const snap = await getDocs(collection(db, 'subjects'))
+			let rows = snap.docs.map((d) => d.data() as StoredSubject)
+
+			const q = data.q?.trim().toLowerCase()
+			if (q) {
+				rows = rows.filter(
+					(s) =>
+						s.id.toLowerCase().includes(q) ||
+						(s.nameTh ?? '').toLowerCase().includes(q) ||
+						(s.nameEn ?? '').toLowerCase().includes(q),
+				)
+			}
+			if (data.openOnly === true || data.openOnly === 'true') {
+				rows = rows.filter((s) => (s.openSections ?? 0) > 0)
+			}
+			if (data.day) rows = rows.filter((s) => (s.offeredDays ?? []).includes(data.day as number))
+			if (data.minRating)
+				rows = rows.filter((s) => (s.ratingAvg ?? 0) >= (data.minRating as number))
+
+			rows.sort((a, b) => a.id.localeCompare(b.id))
+			const total = rows.length
+			const start = (page - 1) * pageSize
+			const items = rows.slice(start, start + pageSize).map((s) => ({
+				id: s.id,
+				nameTh: s.nameTh,
+				nameEn: s.nameEn,
+				credit: s.credit,
+				rating: s.ratingAvg ?? 0,
+				reviewCount: s.reviewCount ?? 0,
+				openSections: s.openSections ?? 0,
+				ruleTh: null,
+			}))
+			return { items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+		},
 	)
 
 export const getSubject = createServerFn({ method: 'GET' })
 	.inputValidator((id: string) => id)
 	.handler(async (): Promise<Subject & { rating: number; reviewCount: number }> => {
+		// TODO(phase 4b): Firestore doc read.
 		throw new Error('NOT_FOUND')
 	})
 
@@ -97,24 +154,27 @@ export const listOfferedSchedules = createServerFn({ method: 'GET' }).handler(
 )
 
 export const listTeachtables = createServerFn({ method: 'GET' }).handler(
-	async (): Promise<Teachtable[]> => [],
+	async (): Promise<import('@repo/db').Teachtable[]> => [],
 )
 
-type Section = Pick<
-	SubjectClass,
-	| 'id'
-	| 'section'
-	| 'lectOrPrac'
-	| 'day'
-	| 'timeStart'
-	| 'timeEnd'
-	| 'room'
-	| 'building'
-	| 'teacherTh'
-	| 'capacity'
-	| 'enrolled'
-	| 'closed'
-> & { year: number | null; term: number | null }
 export const listSectionsForSubject = createServerFn({ method: 'GET' })
 	.inputValidator((id: string) => id)
-	.handler(async (): Promise<Section[]> => [])
+	.handler(
+		async (): Promise<
+			(Pick<
+				import('@repo/db').SubjectClass,
+				| 'id'
+				| 'section'
+				| 'lectOrPrac'
+				| 'day'
+				| 'timeStart'
+				| 'timeEnd'
+				| 'room'
+				| 'building'
+				| 'teacherTh'
+				| 'capacity'
+				| 'enrolled'
+				| 'closed'
+			> & { year: number | null; term: number | null })[]
+		> => [],
+	)

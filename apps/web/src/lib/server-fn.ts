@@ -9,8 +9,10 @@ class Builder {
 	inputValidator(_v: unknown): this {
 		return this
 	}
-	handler<O>(fn: (ctx: { data: never }) => Promise<O>): (opts?: { data?: unknown }) => Promise<O> {
-		return (opts?: { data?: unknown }) => fn({ data: opts?.data as never })
+	handler<O>(
+		fn: (ctx: { data: unknown }) => Promise<O>,
+	): (opts?: { data?: unknown }) => Promise<O> {
+		return (opts?: { data?: unknown }) => fn({ data: opts?.data })
 	}
 }
 

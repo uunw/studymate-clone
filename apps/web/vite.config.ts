@@ -7,6 +7,8 @@ import { defineConfig } from 'vite'
 // Pure client SPA (Firebase migration): no SSR, no server functions. host:true
 // binds all interfaces (127.0.0.1 + LAN) for device testing.
 export default defineConfig({
+	// VITE_* env (e.g. VITE_FIREBASE_*) lives in the monorepo-root .env.
+	envDir: fileURLToPath(new URL('../../', import.meta.url)),
 	server: { port: 3000, host: true },
 	resolve: {
 		alias: { '~': fileURLToPath(new URL('./src', import.meta.url)) },
