@@ -1,8 +1,18 @@
+import { hasCondition, isSectionOpenToStudent, majorToken } from '@repo/core/eligibility'
 import type { SubjectFilter } from '@repo/core/schemas'
-import type { Subject, SubjectClass, Teachtable } from '@repo/db'
+import type {
+	Curriculum,
+	Department,
+	Faculty,
+	Program,
+	Subject,
+	SubjectClass,
+	Teachtable,
+} from '@repo/db'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '~/lib/firebase'
 import { createServerFn } from '~/lib/server-fn'
+import { getSessionUser } from './session'
 
 // Subjects carry denormalized fields (ratingAvg, reviewCount, searchTokens,
 // offeredDays, openSections) seeded by packages/db seed-firestore.
@@ -12,6 +22,18 @@ type StoredSubject = Subject & {
 	searchTokens: string[]
 	offeredDays: number[]
 	openSections: number
+}
+
+// Denormalized group-tree node (curricula/{id}.tree), see seed-firestore.
+type StoredTreeNode = {
+	id: number
+	name: string
+	type: string | null
+	credit: number | null
+	color: string | null
+	acceptPrefix: string | null
+	subjects: { id: string; credit: number; nameTh: string | null; nameEn: string | null }[]
+	children: StoredTreeNode[]
 }
 
 type SubjectListItem = Pick<Subject, 'id' | 'nameTh' | 'nameEn' | 'credit'> & {
@@ -105,9 +127,24 @@ export type GroupOption = {
 	color: string | null
 	children: GroupOption[]
 }
+// Top categories of a curriculum's group tree (the curriculum-root wrapper
+// dropped) — the picker's group dropdown. From curricula/{id}.tree.
 export const listCurriculumGroupOptions = createServerFn({ method: 'GET' })
 	.inputValidator((id: number) => id)
-	.handler(async (): Promise<GroupOption[]> => [])
+	.handler(async (ctx): Promise<GroupOption[]> => {
+		const snap = await getDoc(doc(db, 'curricula', String(ctx.data as number)))
+		if (!snap.exists()) return []
+		const tree = (snap.data() as { tree?: StoredTreeNode | null }).tree
+		if (!tree) return []
+		const toOption = (n: StoredTreeNode): GroupOption => ({
+			id: n.id,
+			name: n.name,
+			type: n.type,
+			color: n.color,
+			children: n.children.map(toOption),
+		})
+		return tree.children.map(toOption)
+	})
 
 export type OfferedElective = {
 	id: string
@@ -117,16 +154,140 @@ export type OfferedElective = {
 	ruleTh: string | null
 	restricted: boolean
 }
+/**
+ * Subjects offered this term for the free-elective picker, each with its
+ * registration condition (เงื่อนไข). A subject is eligible if ANY section admits
+ * the signed-in student; restricted ones (student-id range excludes them) are
+ * hidden unless includeRestricted. Pure Firestore (current-term sections +
+ * catalog + program/department/faculty maps for the filters + student context).
+ */
 export const listOfferedElectives = createServerFn({ method: 'GET' })
 	.inputValidator((d: unknown) => d)
 	.handler(
-		async (): Promise<{
+		async (
+			ctx,
+		): Promise<{
 			items: OfferedElective[]
 			page: number
 			pageSize: number
 			total: number
 			totalPages: number
-		}> => ({ items: [], page: 1, pageSize: 8, total: 0, totalPages: 1 }),
+		}> => {
+			const data = (ctx.data ?? {}) as {
+				q?: string
+				facultyId?: number
+				departmentId?: number
+				includeRestricted?: boolean
+				page?: number
+				pageSize?: number
+			}
+			const page = data.page ?? 1
+			const pageSize = data.pageSize ?? 8
+			const user = await getSessionUser()
+			const studentId = Number(user?.username ?? Number.NaN)
+
+			const [secs, tts, subjSnap, progSnap, deptSnap, facSnap] = await Promise.all([
+				allSections(),
+				teachtables(),
+				getDocs(collection(db, 'subjects')),
+				getDocs(collection(db, 'programs')),
+				getDocs(collection(db, 'departments')),
+				getDocs(collection(db, 'faculties')),
+			])
+			const ttId = currentTtId(tts)
+			const subjById = new Map(subjSnap.docs.map((d) => [d.id, d.data() as Subject]))
+			const programs = new Map(
+				progSnap.docs.map((d) => [(d.data() as Program).id, d.data() as Program]),
+			)
+			const departments = new Map(
+				deptSnap.docs.map((d) => [(d.data() as Department).id, d.data() as Department]),
+			)
+			const faculties = new Map(
+				facSnap.docs.map((d) => [(d.data() as Faculty).id, d.data() as Faculty]),
+			)
+
+			// Student context (major token + faculty) for "เฉพาะสาขา/คณะ" conditions.
+			let elig: { major?: string; faculty?: string } = {}
+			if (user?.curriculumId) {
+				const cSnap = await getDoc(doc(db, 'curricula', String(user.curriculumId)))
+				const prog = cSnap.exists()
+					? programs.get((cSnap.data() as Curriculum).programId ?? -1)
+					: undefined
+				const dept = prog ? departments.get(prog.departmentId ?? -1) : undefined
+				const fac = dept ? faculties.get(dept.facultyId ?? -1) : undefined
+				elig = {
+					major: majorToken(prog?.nameTh) || majorToken(dept?.nameTh) || undefined,
+					faculty: fac?.nameTh ?? undefined,
+				}
+			}
+
+			const facultyOf = (programId: number | null) => {
+				if (programId == null) return null
+				const dId = programs.get(programId)?.departmentId ?? null
+				return dId == null ? null : (departments.get(dId)?.facultyId ?? null)
+			}
+			const q = data.q?.trim().toLowerCase()
+
+			type Acc = OfferedElective & { open: boolean; chosen: boolean }
+			const bySubj = new Map<string, Acc>()
+			for (const sc of secs) {
+				if (sc.teachtableId !== ttId || !sc.subjectId) continue
+				const subj = subjById.get(sc.subjectId)
+				if (!subj) continue
+				if (
+					q &&
+					!(
+						subj.id.toLowerCase().includes(q) ||
+						(subj.nameTh ?? '').toLowerCase().includes(q) ||
+						(subj.nameEn ?? '').toLowerCase().includes(q)
+					)
+				)
+					continue
+				if (
+					data.departmentId &&
+					programs.get(sc.programId ?? -1)?.departmentId !== data.departmentId
+				)
+					continue
+				if (data.facultyId && facultyOf(sc.programId) !== data.facultyId) continue
+
+				const open = isSectionOpenToStudent(sc.ruleTh, studentId, elig)
+				let e = bySubj.get(subj.id)
+				if (!e) {
+					e = {
+						id: subj.id,
+						nameTh: subj.nameTh,
+						nameEn: subj.nameEn,
+						credit: subj.credit,
+						ruleTh: null,
+						restricted: false,
+						open: false,
+						chosen: false,
+					}
+					bySubj.set(subj.id, e)
+				}
+				if (open) {
+					e.open = true
+					if (!hasCondition(sc.ruleTh)) {
+						e.ruleTh = null
+						e.chosen = true
+					} else if (!e.chosen) {
+						e.ruleTh = sc.ruleTh
+					}
+				}
+			}
+			for (const e of bySubj.values()) e.restricted = !!e.ruleTh
+
+			const hideRestricted = !data.includeRestricted && Number.isFinite(studentId)
+			const all = [...bySubj.values()]
+				.filter((s) => (hideRestricted ? s.open : true))
+				.sort((a, b) => a.id.localeCompare(b.id))
+			const total = all.length
+			const start = (page - 1) * pageSize
+			const items: OfferedElective[] = all
+				.slice(start, start + pageSize)
+				.map(({ open: _o, chosen: _c, ...s }) => s)
+			return { items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+		},
 	)
 
 export type CurriculumElective = {
@@ -136,9 +297,114 @@ export type CurriculumElective = {
 	credit: number | null
 	ruleTh: string | null
 }
+/**
+ * Free-elective options for a curriculum, straight from the registrar's curated
+ * teach-table (get-teach-table-show by_class) — the "กลุ่ม 1 (GenEd/เลือกเสรี)"
+ * group, already filtered by major + class-year. The registrar API reflects CORS,
+ * so the SPA fetches it directly. Needs the curriculum's stored registrar codes.
+ */
 export const listCurriculumElectives = createServerFn({ method: 'GET' })
 	.inputValidator((id: number) => id)
-	.handler(async (): Promise<CurriculumElective[]> => [])
+	.handler(async (ctx): Promise<CurriculumElective[]> => {
+		const user = await getSessionUser()
+		const studentId = Number(user?.username ?? Number.NaN)
+		const cSnap = await getDoc(doc(db, 'curricula', String(ctx.data as number)))
+		if (!cSnap.exists()) return []
+		const c = cSnap.data() as Curriculum
+		const rf = c.regFacultyId
+		const rd = c.regDepartmentId
+		const rc = c.regCurriculumId
+		if (!rf || !rd || !rc) return []
+
+		const tt = (await teachtables()).sort((a, b) => b.year - a.year || b.term - a.term)[0]
+		if (!tt) return []
+
+		const admYear = Number.isFinite(studentId)
+			? 2500 + Math.floor(studentId / 1_000_000)
+			: Number.NaN
+		const classYear = Number.isFinite(admYear) ? Math.min(8, Math.max(1, tt.year - admYear + 1)) : 1
+		const searchAllClassYear = !Number.isFinite(admYear)
+		const url =
+			`https://regis.reg.kmitl.ac.th/api/?function=get-teach-table-show&mode=by_class` +
+			`&selected_year=${tt.year}&selected_semester=${tt.term}&selected_faculty=${rf}` +
+			`&selected_department=${rd}&selected_curriculum=${rc}&selected_class_year=${classYear}` +
+			`&search_all_faculty=false&search_all_department=false&search_all_curriculum=false&search_all_class_year=${searchAllClassYear}`
+
+		type Sec = {
+			subject_id: string
+			subject_name_th?: string
+			subject_name_en?: string
+			credit?: string
+			rules_th?: string
+		}
+		type Group = { subject_type_name_th?: string; data?: Sec[] }
+		type Block = { teachtable?: Group[]; curriculum_name_th?: string; faculty_name_th?: string }
+		let blocks: Record<string, Block> = {}
+		try {
+			const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+			blocks = (await res.json()) as Record<string, Block>
+		} catch {
+			return []
+		}
+
+		const stripHtml = (s?: string | null) =>
+			s
+				? s
+						.replace(/<[^>]*>/g, ' ')
+						.replace(/\s+/g, ' ')
+						.trim() || null
+				: null
+		const num = (s?: string) => {
+			const n = Number.parseInt(s ?? '', 10)
+			return Number.isFinite(n) ? n : null
+		}
+
+		const first = Object.values(blocks)[0]
+		const ectx = {
+			major: majorToken(first?.curriculum_name_th) || undefined,
+			faculty: first?.faculty_name_th ?? undefined,
+		}
+
+		const acc = new Map<string, CurriculumElective & { open: boolean; chosen: boolean }>()
+		for (const block of Object.values(blocks)) {
+			for (const g of block.teachtable ?? []) {
+				if (!/เลือกเสรี|GenEd|ศึกษาทั่วไป/i.test(g.subject_type_name_th ?? '')) continue
+				for (const s of g.data ?? []) {
+					if (!s.subject_id) continue
+					const rule = stripHtml(s.rules_th)
+					const open = isSectionOpenToStudent(rule, studentId, ectx)
+					let e = acc.get(s.subject_id)
+					if (!e) {
+						e = {
+							id: s.subject_id,
+							nameTh: s.subject_name_th ?? null,
+							nameEn: s.subject_name_en ?? null,
+							credit: num(s.credit),
+							ruleTh: null,
+							open: false,
+							chosen: false,
+						}
+						acc.set(s.subject_id, e)
+					}
+					if (open) {
+						e.open = true
+						if (!hasCondition(rule)) {
+							e.ruleTh = null
+							e.chosen = true
+						} else if (!e.chosen) {
+							e.ruleTh = rule
+						}
+					}
+				}
+			}
+		}
+
+		const eligibleOnly = Number.isFinite(studentId)
+		return [...acc.values()]
+			.filter((e) => (eligibleOnly ? e.open : true))
+			.sort((a, b) => a.id.localeCompare(b.id))
+			.map(({ open: _o, chosen: _c, ...e }) => e)
+	})
 
 export type SubjectSchedule = {
 	subjectId: string | null
