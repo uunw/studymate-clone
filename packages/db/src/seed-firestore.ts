@@ -38,16 +38,27 @@ const tokenize = (...parts: (string | null)[]) =>
 	].slice(0, 30)
 
 async function main() {
-	const [faculties, departments, programs, curricula, subjects, teachtables, sections] =
-		await Promise.all([
-			db.select().from(schema.faculty),
-			db.select().from(schema.department),
-			db.select().from(schema.program),
-			db.select().from(schema.curriculum),
-			db.select().from(schema.subject),
-			db.select().from(schema.teachtable),
-			db.select().from(schema.subjectClass),
-		])
+	const [
+		faculties,
+		departments,
+		programs,
+		curricula,
+		subjects,
+		teachtables,
+		sections,
+		groups,
+		groupSubjects,
+	] = await Promise.all([
+		db.select().from(schema.faculty),
+		db.select().from(schema.department),
+		db.select().from(schema.program),
+		db.select().from(schema.curriculum),
+		db.select().from(schema.subject),
+		db.select().from(schema.teachtable),
+		db.select().from(schema.subjectClass),
+		db.select().from(schema.curriculumGroup),
+		db.select().from(schema.curriculumGroupSubject),
+	])
 
 	// Current term = latest teachtable; denormalize offered days + open-section count.
 	const cur = [...teachtables].sort((a, b) => b.year - a.year || b.term - a.term)[0]
@@ -64,11 +75,69 @@ async function main() {
 		}
 	}
 
+	// Curriculum group tree → denormalize onto each curriculum (curricula/{id}.tree)
+	// so the progress page + admin editor read one doc instead of walking the graph.
+	// Node shape feeds @repo/core allocateProgress directly (subjects carry credit).
+	type TreeNode = {
+		id: number
+		name: string
+		type: string | null
+		credit: number | null
+		color: string | null
+		acceptPrefix: string | null
+		subjects: { id: string; credit: number; nameTh: string | null; nameEn: string | null }[]
+		children: TreeNode[]
+	}
+	const subjectById = new Map(subjects.map((s) => [s.id, s]))
+	const groupById = new Map(groups.map((g) => [g.id, g]))
+	const childrenByParent = new Map<number, typeof groups>()
+	for (const g of groups) {
+		if (g.parentId == null) continue
+		const list = childrenByParent.get(g.parentId) ?? []
+		list.push(g)
+		childrenByParent.set(g.parentId, list)
+	}
+	// Creation order (id asc): specific groups before catch-all FREE buckets seeded last.
+	for (const list of childrenByParent.values()) list.sort((a, b) => a.id - b.id)
+	const subjectsByGroup = new Map<number, TreeNode['subjects']>()
+	for (const link of groupSubjects) {
+		const subj = subjectById.get(link.subjectId)
+		const list = subjectsByGroup.get(link.groupId) ?? []
+		list.push({
+			id: link.subjectId,
+			credit: subj?.credit ?? 0,
+			nameTh: subj?.nameTh ?? null,
+			nameEn: subj?.nameEn ?? null,
+		})
+		subjectsByGroup.set(link.groupId, list)
+	}
+	const buildTree = (groupId: number): TreeNode | null => {
+		const g = groupById.get(groupId)
+		if (!g) return null
+		return {
+			id: g.id,
+			name: g.name ?? '',
+			type: g.type,
+			credit: g.credit,
+			color: g.color,
+			acceptPrefix: g.acceptPrefix ?? null,
+			subjects: subjectsByGroup.get(g.id) ?? [],
+			children: (childrenByParent.get(g.id) ?? [])
+				.map((c) => buildTree(c.id))
+				.filter((n): n is TreeNode => n !== null),
+		}
+	}
+	let treeCount = 0
+
 	const docs: Doc[] = []
 	for (const f of faculties) docs.push({ col: 'faculties', id: String(f.id), data: f })
 	for (const d of departments) docs.push({ col: 'departments', id: String(d.id), data: d })
 	for (const p of programs) docs.push({ col: 'programs', id: String(p.id), data: p })
-	for (const c of curricula) docs.push({ col: 'curricula', id: String(c.id), data: c })
+	for (const c of curricula) {
+		const tree = c.groupId != null ? buildTree(c.groupId) : null
+		if (tree) treeCount++
+		docs.push({ col: 'curricula', id: String(c.id), data: { ...c, tree } })
+	}
 	for (const t of teachtables) docs.push({ col: 'teachtables', id: String(t.id), data: t })
 	for (const sc of sections) docs.push({ col: 'sections', id: String(sc.id), data: sc })
 	for (const s of subjects) {
@@ -89,7 +158,7 @@ async function main() {
 	console.log(
 		`seeding Firestore: ${faculties.length} faculties, ${departments.length} departments, ` +
 			`${programs.length} programs, ${curricula.length} curricula, ${subjects.length} subjects, ` +
-			`${sections.length} sections, ${teachtables.length} teachtables (${docs.length} docs)`,
+			`${sections.length} sections, ${teachtables.length} teachtables, ${treeCount} curriculum trees (${docs.length} docs)`,
 	)
 	await commitInChunks(docs)
 	console.log('done')

@@ -1,4 +1,5 @@
-import { auth } from '~/lib/firebase'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '~/lib/firebase'
 
 export type SessionUser = {
 	id: string
@@ -17,9 +18,19 @@ export type SessionUser = {
 /**
  * Current user from Firebase Auth, mapped to the app's SessionUser shape. The
  * 8-digit student id is the @kmitl.ac.th email local-part; the real name comes
- * from Google. TODO(phase 4): merge the Firestore users/{uid} profile doc
- * (curriculumId, isAdmin, nickname, policyViewed).
+ * from Google. The Firestore users/{uid} profile doc (curriculumId, isAdmin,
+ * nickname, policyViewed) is merged in when present; writes land there via
+ * server/profile.ts.
  */
+type ProfileDoc = {
+	curriculumId?: number | null
+	isAdmin?: boolean
+	nickname?: string | null
+	firstName?: string | null
+	lastName?: string | null
+	policyViewed?: boolean
+}
+
 export async function getSessionUser(): Promise<SessionUser | null> {
 	await auth.authStateReady()
 	const u = auth.currentUser
@@ -29,17 +40,21 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 	const studentId = /^\d{8}$/.test(local) ? local : null
 	const display = u.displayName ?? ''
 	const [firstName, ...rest] = display.split(' ')
+
+	const snap = await getDoc(doc(db, 'users', u.uid))
+	const p: ProfileDoc = snap.exists() ? (snap.data() as ProfileDoc) : {}
+
 	return {
 		id: u.uid,
 		email,
 		username: studentId,
 		name: display || local,
-		firstName: firstName || null,
-		lastName: rest.join(' ') || null,
-		nickname: display || null,
+		firstName: p.firstName ?? firstName ?? null,
+		lastName: p.lastName ?? (rest.join(' ') || null),
+		nickname: p.nickname ?? display ?? null,
 		image: u.photoURL ?? null,
-		isAdmin: false,
-		curriculumId: null,
-		policyViewed: false,
+		isAdmin: p.isAdmin === true,
+		curriculumId: p.curriculumId ?? null,
+		policyViewed: p.policyViewed === true,
 	}
 }
