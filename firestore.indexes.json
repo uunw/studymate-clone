@@ -1,0 +1,5 @@
+{
+	"//": "Composite indexes are added in phase 4 as queries are built (e.g. reviews by subjectId+createdAt, subjects by ratingAvg). Firestore prints the exact index URL when a query needs one.",
+	"indexes": [],
+	"fieldOverrides": []
+}
