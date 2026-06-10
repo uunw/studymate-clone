@@ -88,33 +88,15 @@ Per-user (owner-only): users/{uid} (profile) + users/{uid}/private/{plan,transcr
   PKCE client, student id = preferred_username). Replaced by Firebase Google auth.
 
 ## Recent session log
-### 2026-06-09 (cont.) — SPA + Firestore migration (branch migrate/firebase-spa)
-Migrating off SSR/Drizzle/Neon → pure client SPA (TanStack Router, static Vite build) + Firestore
-+ Firebase Auth (Google, hd=kmitl.ac.th; 8-digit id = email local-part). Project `studymate-kmitl`
-(asia-southeast1), under taokaeg2. Done end-to-end:
-- Shell-swap to SPA (no SSR/server fns); `lib/server-fn.ts` shim keeps server/*.ts call sites.
-  Heavy server deps erased via `import type` from @repo/db. firestore.rules = the authz layer.
-- Seed Postgres→Firestore (`@repo/db seed:firestore`, 2303 docs): faculties/departments/programs/
-  curricula/subjects(denormalized ratingAvg/reviewCount/searchTokens/offeredDays/openSections)/
-  sections/teachtables + **curricula/{id}.tree** (the curriculum_group graph denormalized as one
-  ProgressGroupInput tree). `seed:reviews` adds demo reviews (sample:true) + recomputes aggregates.
-  Re-seed order: seed:firestore THEN seed:reviews (firestore resets subject aggregates to 0).
-- Every server/*.ts now hits Firestore / the registrar API (no empty stubs). VERIFIED in-browser
-  (public, no auth): subjects browse (748), subject detail + sections + reviews, reviews feed,
-  curriculum-group filter (748→26). Data layer verified via scripts: curriculum tree +
-  allocateProgress (90/114, 79%). Registrar API REFLECTS CORS (access-control-allow-origin: <our
-  origin>) → SPA fetches get-pattern-subject / get-teach-table-show directly, no proxy needed.
-- Firestore-without-Cloud-Functions aggregates: field-scoped rules let a kmitl user update ONLY
-  {ratingAvg,reviewCount} on a subject and ONLY {likeCount} on a review (recomputed client-side);
-  authoritative reviews/likes stay author-gated. isAdmin sourced from admins/{uid} (not the
-  self-writable profile). User data under users/{uid} (+ /private/plan, /private/transcript).
-- PENDING (user action): enable the Google sign-in provider in the Firebase console — unlocks ALL
-  auth-gated features (progress UI, transcript upload/parse via unpdf, review/plan/profile writes,
-  admin) which were wired "blind" (green typecheck/build/lint, untested UI). KNOWN GAP: the admin
-  curriculum-GROUP editor writes throw "not supported" — the denormalized tree has no group→
-  curriculum index; needs a normalized curriculumGroups collection or curriculumId threaded
-  through the editor (the group-tree READ + everything else works). Cleanup TODO: drop unused
-  web deps (react-start/better-auth/@repo/auth), trim the ~595kB firebase chunk. See MIGRATION.md.
+### 2026-06-10 — SPA + Firestore + Firebase migration SHIPPED
+Migrated TanStack Start SSR / Drizzle+Neon / Better Auth → client SPA + Firestore + Firebase Auth
+(architecture + data model now live in the Stack / Auth / Firestore / Known-landmines sections
+above). Merged f7ecf23, deployed live (studymate-kmitl.web.app), verified end-to-end on production
+Firestore — public pages (subjects 748 / detail / reviews / group filter 748→26) + the
+authenticated half (progress 46%, electives, review write + aggregate recompute, toggleLike) via a
+custom-token test session. Deps trimmed, vendor bundle split. Reusable techniques captured as
+learned skills: verify-firebase-gated-spa-via-custom-token, firestore-client-aggregates-field-
+scoped-rules. Full plan in MIGRATION.md.
 ### 2026-06-09 — KMITL SSO unblocked + mobile-app progress UI + a11y pass
 SSO works end-to-end: switched to the registrar realm public client (`KMITL-client`, PKCE, no
 secret), relaxed `ssoEnabled` (id+issuer only), name fallback in mapProfileToUser (`||` not
